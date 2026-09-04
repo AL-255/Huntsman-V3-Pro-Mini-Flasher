@@ -66,12 +66,13 @@ huntsman-updater flash DeviceUpdater.resources --no-enter-boot
 
 ## Known limitations
 
-- The 32-byte firmware-file header carried in the DFU `START` packet is a
-  zero-filled placeholder: the original `.enc` envelope is not present in the
-  extracted artifacts, so its exact bytes could not be recovered.
+- The 420/448-byte `START`-packet preface (appended after the 32-byte header)
+  is not reproduced; its exact contents were not recovered.
 - The secondary FlashFW erase/program/verify **sequencing** is reconstructed
   from the .NET worker IL and is best-effort; it has not been verified
   on-device.
-- The `flashfw.bin` **encryption** (`encryption_en=1`) is not re-implemented.
+- The `flashfw.bin` **encryption** (`encryption_en=1`) is not re-implemented —
+  no standard crypto is linked into the updater binaries, and the `.enc`
+  envelope is absent from the extracted artifacts.
 - Nothing has been exercised against a physical keyboard (no device available
   in this environment).

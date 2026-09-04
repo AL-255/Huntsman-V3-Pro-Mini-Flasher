@@ -238,9 +238,11 @@ app_start=0x20000000
 The `Ry_Online_Update_Dll` engine streams a single firmware file. Its
 structure is **confirmed** from `FUN_10006650`:
 
-- The file is `[32-byte header][payload]` where the payload is the application
-  image (128 KiB). The 32-byte header is what the START packet carries at
-  `[12..43]`; the payload is streamed as 512-byte DATA packets.
+- The file is `[32-byte header][payload]`: the 32-byte header is simply the
+  **first 32 bytes of the application image** (the Cortex-M33 vector table),
+  carried in the START packet at `[12..43]`; the remaining `file_size - 32`
+  bytes (131040) are streamed as 512-byte DATA packets, and `file_size - 32`
+  is the START size field and the END `value = size >> 2`.
 - Integrity: the whole file is XOR-folded into a 32-bit checksum (little-endian
   u32 words) and compared against the `%08x` value embedded in the filename
   (e.g. `E888780F` from `..._v2.1.0_E888780F.enc`).
@@ -323,11 +325,13 @@ worker chain) proceeds in this order:
 
 ## 9. Open items
 
-- The exact 32-byte firmware-file header content and the 420/448-byte START
-  packet preface.
-- The FlashFW region-protocol command bytes (the `SendCmd` region metadata
-  encoding) and the `flashfw.bin` encryption scheme.
+- The 420/448-byte START packet preface appended after the 32-byte header.
+- The `flashfw.bin` encryption scheme (no standard crypto is linked into the
+  updater binaries; the `.enc` envelope is not present in the extracted
+  artifacts).
 - The bootloader's flash region/address map (where the app image is written).
+- On-device verification (no physical keyboard is available in this
+  environment).
 
 ## 10. Scope
 
