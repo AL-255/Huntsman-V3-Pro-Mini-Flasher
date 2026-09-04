@@ -82,3 +82,28 @@ def parse_response(payload: bytes) -> tuple[int, int]:
     if len(payload) < C.DFU_RESP_STATUS + 1:
         raise ValueError("input report payload too short")
     return payload[C.DFU_RESP_ECHO], payload[C.DFU_RESP_STATUS]
+
+
+def build_getv_command() -> bytes:
+    """Build the bootloader "get version" command (``FUN_10004000``).
+
+    A 12-byte frame sent over the 65-byte output-report channel before the DFU
+    stream: ``[0x30 00 00 00][04 00 00 00]["getv"]``.  The response echoes
+    ``0x30`` and carries the bootloader version words.
+    """
+    return b"\x30\x00\x00\x00" + struct.pack("<I", 4) + b"getv"
+
+
+def parse_getv_response(payload: bytes) -> dict:
+    """Parse a bootloader "get version" response (64-byte payload).
+
+    Recovered fields: ``[0]`` echo ``'0'`` (0x30), ``[4..5]`` a fixed ``0x10``
+    marker, ``[6..7]``/``[8..9]`` two version words.
+    """
+    if len(payload) < 10 or payload[0] != 0x30:
+        raise ValueError("not a getv response")
+    return {
+        "marker": int.from_bytes(payload[4:6], "little"),
+        "version_a": int.from_bytes(payload[6:8], "big"),
+        "version_b": int.from_bytes(payload[8:10], "big"),
+    }

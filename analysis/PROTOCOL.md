@@ -176,6 +176,19 @@ After each chunk the host reads a 65-byte report. Response byte 0 echoes the
 command; a status byte (offset ~8) is `'6'` (`0x36`) for per-chunk ACK and
 `'4'` (`0x34`) for the final completion ACK.
 
+### 4.4 Bootloader version query ("getv")
+
+Before streaming, `FUN_10004000` sends a 12-byte **get version** command over
+the same 65-byte output-report channel:
+
+```
+30 00 00 00 | 04 00 00 00 | "getv"
+```
+
+The response echoes `0x30` and carries a `0x10` marker at `[4..5]` and two
+version words at `[6..7]` / `[8..9]` (big-endian), which the host reads as the
+bootloader firmware version.
+
 ## 5. WinUSB checksum control
 
 `FWUpdaterDLL.dll::ControlIn/ControlOut` wrap `WinUsb_ControlTransfer`:
