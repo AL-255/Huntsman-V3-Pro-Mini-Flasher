@@ -8,10 +8,13 @@ from __future__ import annotations
 # --- USB identity -----------------------------------------------------------
 RAZER_VID = 0x1532
 
-# Application mode: the keyboard enumerates as a composite device whose HID
-# configuration interface is interface 5 ("mi_05" in the bootdev_info string).
+# Application mode: the keyboard enumerates as a composite device.  Interface 3
+# carries the 90-byte HID *feature* report used for device-information queries;
+# interface 5 ("mi_05" in the bootdev_info string) carries the 64-byte
+# input/output reports used by the DFU stream.
 APP_PID = 0x02B0
-APP_CONFIG_INTERFACE = 5
+APP_CONFIG_INTERFACE = 3   # 90-byte feature-report config interface
+APP_DFU_INTERFACE = 5      # 64-byte I/O ("mi_05") interface
 
 # Bootloader mode: after the "enter bootloader" command the LPC5528 reboots
 # and re-enumerates with this PID (device descriptor bcdDevice == 0x02B0).
@@ -60,14 +63,15 @@ OPCODE_QUERY_EXTENDED_VERSION = 0x87  # 8-byte full firmware version
 OPCODE_QUERY_BUILD = 0x9F            # 4-byte build
 OPCODE_QUERY_PROFILE_TIMER = 0xC0    # 2-byte profile timer
 
-# Response payload sizes (bytes) for the channel-0 read queries.
+# Response payload sizes (bytes) for the channel-0 read queries (verified
+# against a physical Huntsman V3 Pro Mini).
 DEVICE_QUERY_RESPONSE_SIZES = {
     OPCODE_QUERY_VERSION: 2,
     OPCODE_READ_CONFIGURATION: 22,
     OPCODE_QUERY_CAPABILITY: 2,
     OPCODE_QUERY_MODE: 1,
     OPCODE_QUERY_PAIR: 2,
-    OPCODE_QUERY_EXTENDED_VERSION: 8,
+    OPCODE_QUERY_EXTENDED_VERSION: 4,
     OPCODE_QUERY_BUILD: 4,
     OPCODE_QUERY_PROFILE_TIMER: 2,
 }

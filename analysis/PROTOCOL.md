@@ -14,8 +14,25 @@ further confirmation).
 
 | Role | VID | PID | bcdDevice | Notes |
 | --- | --- | --- | --- | --- |
-| Application (keyboard) | `0x1532` | `0x02B0` | — | composite device; HID config interface = `mi_05` |
+| Application (keyboard) | `0x1532` | `0x02B0` | — | composite device; 6 USB interfaces |
 | Bootloader | `0x1532` | `0x110E` | `0x02B0` | entered by host command, then flashed |
+
+Application-mode USB interface layout (**verified** against a physical
+Huntsman V3 Pro Mini):
+
+| Interface | Class | Role |
+| --- | --- | --- |
+| 0 | HID | boot keyboard |
+| 1 | HID | NKRO keyboard + consumer/system |
+| 2 | HID | boot mouse |
+| 3 | HID (feature-report-only) | **90-byte feature report — the config command frame** |
+| 4 | HID | Razer vendor feature reports (report IDs 1..6, 22/2/28/50/9/1 B) |
+| 5 | HID | **64-byte input/output (`mi_05`) — the DFU stream** |
+
+Interface 3 carries the 90-byte command frame (91 bytes with the implicit
+report id 0) and is the one the device-information queries below use; it has no
+interrupt endpoint, so `usbhid` does not bind it and a raw-USB
+`SET_REPORT`/`GET_REPORT` transport is used instead.
 
 These come from the `.resources` metadata (`VID`, `PID`, `BLVID`, `BLPID`,
 `BCDPID_BL`) and from `update_config.ini` (`bootdev_info=vid_1532&pid_02B0&mi_05`).
@@ -84,13 +101,19 @@ the response payload sizes listed below (**confirmed** from the firmware's
 | Opcode | Name | Response |
 | --- | --- | --- |
 | `0x81` | QUERY_VERSION | 2 bytes (version0, version1) |
-| `0x82` | QUERY_IDENTIFIER | 22 bytes (serial number / config blob) |
+| `0x82` | QUERY_IDENTIFIER | 22 bytes (serial number, e.g. `PM2503F87401979`) |
 | `0x83` | QUERY_CAPABILITY | 2 bytes |
 | `0x84` | QUERY_MODE | 1 byte |
 | `0x86` | QUERY_PAIR | 2 bytes |
-| `0x87` | QUERY_EXTENDED_VERSION | 8 bytes (4 version + 4 extended) |
+| `0x87` | QUERY_EXTENDED_VERSION | 4 bytes (verified; firmware v2.1.0 reports 4, not 8) |
 | `0x9f` | QUERY_BUILD | 4 bytes |
 | `0xc0` | QUERY_PROFILE_TIMER | 2 bytes |
+
+All eight queries plus the response checksum were **verified on a physical
+device**: serial `PM2503F87401979`, version `1.04`, extended version
+`01 04 00 00`, capability `01 34`, mode `0`, build `00 00 01 00`. The device
+firmware (1.04) predates the updater's target (2.01.00), confirming an update
+is pending.
 
 Write opcodes: `0x02` WRITE_IDENTIFIER, `0x04` SET_MODE (enter device mode /
 bootloader), `0x06` WRITE_PAIR, `0x0b` RESTORE, `0x40` WRITE_PROFILE_TIMER.

@@ -25,12 +25,20 @@ re-implements it as a standalone, scriptable updater.
 
 ## Device facts
 
-- Application mode: USB `1532:02B0` (HID config interface `mi_05`).
+- Application mode: USB `1532:02B0` (6 interfaces; the 90-byte feature-report
+  config interface is **interface 3**, the 64-byte DFU interface is
+  **interface 5** = `mi_05`).
 - Bootloader mode: USB `1532:110E` (bcdDevice `0x02B0`).
   - Entered by the host `SET_MODE` command, **or manually by plugging the USB
     cable in while holding `Fn`.**
 - Application firmware: 128 KiB image, RAM-resident at `0x20000000`.
 - Secondary flash firmware: 37408 bytes (the "7203" Optical-ASIC controller).
+
+**Validated on hardware:** `huntsman-updater device-info` was run against a
+physical Huntsman V3 Pro Mini and read back serial `PM2503F87401979`, firmware
+version `1.04`, capability `01 34`, mode `0`, and build `00 00 01 00` (all with
+matching response checksums). The feature-report interface has no kernel
+driver, so on Linux the `usbdevfs` transport requires root.
 
 ## Implemented
 
