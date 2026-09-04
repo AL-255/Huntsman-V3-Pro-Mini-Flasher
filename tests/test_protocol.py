@@ -87,14 +87,17 @@ def test_region_list_payload():
     import struct
     p = region.build_region_list_payload(1, 1, 2, 0x50)
     assert p == struct.pack("<HHHH", 1, 1, 2, 0x50)
-    r = region.build_region_list_report(p)
+    r = region.build_region_set_id_list_report(p)
     f = frame.parse_frame(r)
     assert f[C.FRAME_CHANNEL] == region.CHANNEL_REGION
-    assert f[C.FRAME_OPCODE] == region.OPCODE_REGION_LIST
+    assert f[C.FRAME_OPCODE] == region.OPCODE_REGION_SET_ID_LIST
+    # region info query uses opcode 0x80
+    f = frame.parse_frame(region.build_region_info_report())
+    assert f[C.FRAME_OPCODE] == region.OPCODE_REGION_GET_INFO
     # response parsing: region_size from elements 4..7
     payload = struct.pack("<8H", 1, 1, 2, 0, 0, 0, 0x92, 0x20)
     resp = frame.to_report(frame.build_frame(
-        region.CHANNEL_REGION, region.OPCODE_REGION_LIST, payload,
+        region.CHANNEL_REGION, region.OPCODE_REGION_GET_INFO, payload,
         payload_count=len(payload)))
     info = region.parse_region_list_response(resp)
     assert info["region_size"] == 0x9220

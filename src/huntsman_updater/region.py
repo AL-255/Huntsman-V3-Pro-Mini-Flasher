@@ -24,8 +24,9 @@ from . import constants as C
 from . import frame
 
 CHANNEL_REGION = 0x0A
-OPCODE_REGION_LIST = 0x00
-OPCODE_REGION_DATA = 0x02
+OPCODE_REGION_GET_INFO = 0x80   # read region info (total/RegionID/type/size)
+OPCODE_REGION_SET_ID_LIST = 0x00  # write region ID list
+OPCODE_REGION_DATA = 0x02       # write region data (one chunk)
 
 # Channel 0x10 is the secondary "flash FW" DFU channel (confirmed from
 # FWUpdaterDLL::DFUErase/DFUProgram/DFUVerify disassembly).  Its payload is
@@ -45,9 +46,19 @@ def build_region_list_payload(total: int, region_id: int, region_type: int,
                        region_type & 0xFFFF, packet_size & 0xFFFF)
 
 
-def build_region_list_report(payload: bytes) -> bytes:
-    """Build the 91-byte feature report for the region-list query."""
-    f = frame.build_frame(CHANNEL_REGION, OPCODE_REGION_LIST, payload,
+def build_region_info_report() -> bytes:
+    """Build the 91-byte feature report for the region-info query (opcode 0x80).
+
+    The request payload is empty; the response carries the region list.
+    """
+    f = frame.build_frame(CHANNEL_REGION, OPCODE_REGION_GET_INFO, b"",
+                          payload_count=0)
+    return frame.to_report(f)
+
+
+def build_region_set_id_list_report(payload: bytes) -> bytes:
+    """Build the 91-byte feature report that writes the region ID list."""
+    f = frame.build_frame(CHANNEL_REGION, OPCODE_REGION_SET_ID_LIST, payload,
                           payload_count=len(payload))
     return frame.to_report(f)
 

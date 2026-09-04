@@ -295,15 +295,22 @@ the firmware file header to validate it before streaming.
 
 ## 8. Orchestration
 
-`CustomerFWU2Point5.exe` (per the `backgroundWorker_RyCoreUpdate` worker):
+The full update (**observed** from `buttonUpdate_Click` and the background
+worker chain) proceeds in this order:
 
-1. Extract firmware from `DeviceUpdater.resources`, write `update_config.ini`
-   and the firmware file.
-2. `UserSetCfgFilePath(dir, file)`.
-3. `chipGoToBootFirmware(callback)` — find device, verify serial, prepare.
-4. `appUpdateFirmware(callback)` — stream the firmware via the DFU engine.
+1. Extract firmware from `DeviceUpdater.resources`; write the application
+   firmware file and `\update\flashfw.bin` + `update_config.ini`.
+2. **Enter the bootloader** — `EnterBLMode()` → `SET_MODE` (`0x04`) on the
+   application device, which resets into the bootloader (`1532:110E`).
+3. **Flash the application image** — `chipGoToBootFirmware` (find device,
+   verify serial) then `appUpdateFirmware` (the DFU START/DATA/END stream over
+   65-byte reports, §4).
+4. The device reboots back into application mode.
+5. **Flash the secondary image** — the region workers query/set the region
+   list and stream `flashfw.bin` (channel `0x0a`, §7.2), then erase/program/
+   verify the regions (channel `0x10` DFU) and read back a WinUSB checksum.
 
-Progress/state callbacks use the `UPDATE_STATE` values
+`appUpdateFirmware` progress callbacks use the `UPDATE_STATE` values
 `STATE_DEV_ENT_BOOT_MODE`, `STATE_CHECK_HID_DEVICE`, `STATE_SEND_START_PACKET`,
 `STATE_SEND_DATA_PACKET`, `STATE_SEND_END_PACKET`, `STATE_EXIT_UPGRADE`.
 

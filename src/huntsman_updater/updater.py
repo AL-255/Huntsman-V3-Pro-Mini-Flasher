@@ -40,9 +40,13 @@ def enter_bootloader(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
         dev.close()
 
 
-def wait_for_bootloader(vid: int = C.RAZER_VID, pid: int = C.BOOTLOADER_PID,
-                        timeout_s: float = 30.0) -> "transport.HidDevice":
-    """Poll until the bootloader HID device appears, then open it."""
+def wait_for_device(vid: int = C.RAZER_VID, pid: int = C.BOOTLOADER_PID,
+                    timeout_s: float = 30.0) -> "transport.HidDevice":
+    """Poll until a HID device (``vid:pid``) appears, then open it.
+
+    Used to await the bootloader (``1532:110E``) after entering it and to await
+    the application device (``1532:02B0``) after the post-flash reboot.
+    """
     deadline = time.monotonic() + timeout_s
     last_error: Exception | None = None
     while time.monotonic() < deadline:
@@ -52,7 +56,7 @@ def wait_for_bootloader(vid: int = C.RAZER_VID, pid: int = C.BOOTLOADER_PID,
             last_error = exc
             time.sleep(0.5)
     raise transport.TransportError(
-        f"bootloader ({vid:04x}:{pid:04x}) did not appear within "
+        f"device ({vid:04x}:{pid:04x}) did not appear within "
         f"{timeout_s}s") from last_error
 
 
@@ -129,16 +133,61 @@ def stream_firmware(dev, app_image: bytes,
     _send_packet(dev, dfu.build_end_packet(counter, checksum, len(app_image)))
 
 
-def update(package, enter_boot: bool = True, progress=None) -> None:
-    """Run the full update: enter bootloader, stream the app image, verify.
+def _feature_command(dev, report: bytes, timeout_ms: int = 3000) -> bytes:
+    """Send a 91-byte feature report and return the raw response report."""
+    from . import frame as _frame
+    dev.send_feature_report(report)
+    return dev.get_feature_report(0, C.FEATURE_REPORT_LEN)
 
-    The secondary FlashFW image (``package.flash_image``) is extracted and
-    validated by :mod:`resources` but its flashing route is not yet
-    re-implemented (see ``analysis/PROTOCOL.md`` §9).
+
+def flash_secondary(dev, flash_image: bytes, packet_size: int = 0x50,
+                    progress=None) -> None:
+    """Flash the secondary FlashFW image through the app-mode bridge.
+
+    Best-effort reconstruction of the .NET region workers (see
+    ``analysis/PROTOCOL.md`` §7.2 and §8): query the region list, write the
+    region ID list, stream the image in ``packet_size`` chunks over channel
+    ``0x0a``, then erase/program/verify over channel ``0x10``.
+    """
+    from . import region
+
+    # 1. Region info query.
+    info_report = _feature_command(dev, region.build_region_info_report())
+    info = region.parse_region_list_response(info_report)
+
+    # 2. Region ID list write (one region, the FlashFW image).
+    id_payload = region.build_region_list_payload(
+        1, 1, info["type"], packet_size)
+    _feature_command(dev, region.build_region_set_id_list_report(id_payload))
+
+    # 3. Region data write, chunked.
+    for off in range(0, len(flash_image), packet_size):
+        chunk = flash_image[off:off + packet_size]
+        _feature_command(dev, region.build_region_data_report(chunk))
+        if progress is not None:
+            progress(min(off + len(chunk), len(flash_image)), len(flash_image))
+
+    # 4. Erase/program the region via the channel-0x10 DFU.  The DFU frame
+    # carries a 5-byte prefix (length + address), so a program chunk is capped
+    # at 75 bytes (the 80-byte payload budget).
+    _feature_command(dev, region.build_dfu_erase_report(0, len(flash_image)))
+    dfu_chunk = min(packet_size, 75)
+    for off in range(0, len(flash_image), dfu_chunk):
+        chunk = flash_image[off:off + dfu_chunk]
+        _feature_command(dev, region.build_dfu_program_report(chunk, off))
+
+
+def update(package, enter_boot: bool = True, flash_fw: bool = True,
+           progress=None) -> None:
+    """Run the full update: enter bootloader, flash the app image, then the
+    secondary FlashFW image (best-effort).
+
+    ``flash_fw`` toggles the secondary image flashing; its sequencing is
+    reconstructed from the .NET workers and remains to be verified on-device.
     """
     if enter_boot:
         enter_bootloader(C.RAZER_VID, package.pid, C.APP_CONFIG_INTERFACE)
-        dev = wait_for_bootloader(C.RAZER_VID, package.bootloader_pid)
+        dev = wait_for_device(C.RAZER_VID, package.bootloader_pid)
     else:
         dev = transport.open_by_interface(C.RAZER_VID, package.bootloader_pid, None)
 
@@ -146,3 +195,12 @@ def update(package, enter_boot: bool = True, progress=None) -> None:
         stream_firmware(dev, package.app_image, progress=progress)
     finally:
         dev.close()
+
+    if flash_fw and package.flash_image:
+        # The device reboots back into application mode after the app image is
+        # flashed; the secondary image is then pushed through its bridge.
+        dev = wait_for_device(C.RAZER_VID, package.pid)
+        try:
+            flash_secondary(dev, package.flash_image, progress=progress)
+        finally:
+            dev.close()
