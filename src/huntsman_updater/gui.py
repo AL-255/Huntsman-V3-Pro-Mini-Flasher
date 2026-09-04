@@ -19,6 +19,7 @@ from .firmware import (parse_intel_hex, validate_app_image,
                        validate_flash_image)
 from .resources import FirmwarePackage, load_firmware_package
 from .settings import DeviceConfig
+from .usbdev import UsbDevice, UsbInterface, enumerate_usb_devices
 
 POLL_INTERVAL_MS = 2000
 
@@ -205,11 +206,16 @@ class HuntsmanUpdaterApp:
 
     # -- advanced device selection ------------------------------------------
     def _open_advanced(self) -> None:
-        """Open the advanced-settings dialog for a custom VID/PID/interface."""
+        """Open the advanced-settings dialog for a custom VID/PID/interface.
+
+        The dialog shows a foldable tree of every visible USB device and its
+        interfaces; selecting one fills the VID/PID/interface fields.
+        """
         win = tk.Toplevel(self.root)
         win.title("Advanced settings")
         win.transient(self.root)
-        win.resizable(False, False)
+        win.geometry("520x560")
+        win.minsize(420, 440)
         pad = {"padx": 6, "pady": 3}
 
         custom = tk.BooleanVar(value=self._custom_device)
@@ -244,6 +250,47 @@ class HuntsmanUpdaterApp:
             fields[key] = (var, entry)
         _set_fields()
 
+        # --- foldable USB device tree --------------------------------------
+        ttk.Label(win, text="USB devices:").grid(
+            row=6, column=0, sticky="w", **pad)
+        ttk.Button(win, text="Refresh", command=self._populate_usb_tree
+                   ).grid(row=6, column=1, sticky="e", **pad)
+
+        tree_frame = ttk.Frame(win)
+        tree_frame.grid(row=7, column=0, columnspan=2, sticky="nsew", **pad)
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
+
+        tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse",
+                            height=8)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical",
+                                  command=tree.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        self._usb_tree = tree
+        self._usb_tree_data: dict[str, tuple[UsbDevice, UsbInterface | None]] \
+            = {}
+
+        def _on_select(_event) -> None:
+            selection = tree.selection()
+            if not selection:
+                return
+            item = self._usb_tree_data.get(selection[0])
+            if item is None:
+                return
+            device, iface = item
+            custom.set(True)
+            _set_fields()
+            fields["vid"][0].set(f"{device.vid:04X}")
+            fields["app_pid"][0].set(f"{device.pid:04X}")
+            if iface is not None:
+                fields["app_interface"][0].set(str(iface.number))
+
+        tree.bind("<<TreeviewSelect>>", _on_select)
+        self._populate_usb_tree()
+
         def _ok() -> None:
             if not custom.get():
                 self._custom_device = False
@@ -272,11 +319,29 @@ class HuntsmanUpdaterApp:
             win.destroy()
 
         buttons = ttk.Frame(win)
-        buttons.grid(row=len(spec) + 1, column=0, columnspan=2,
-                     sticky="e", **pad)
+        buttons.grid(row=8, column=0, columnspan=2, sticky="e", **pad)
         ttk.Button(buttons, text="OK", command=_ok).pack(side="left", padx=4)
         ttk.Button(buttons, text="Cancel", command=win.destroy).pack(
             side="left", padx=4)
+
+        win.rowconfigure(7, weight=1)
+        win.columnconfigure(1, weight=1)
+
+    def _populate_usb_tree(self) -> None:
+        """(Re)fill the advanced dialog's USB device tree."""
+        tree = getattr(self, "_usb_tree", None)
+        if tree is None:
+            return
+        tree.delete(*tree.get_children())
+        self._usb_tree_data.clear()
+        for i, dev in enumerate(enumerate_usb_devices()):
+            dev_id = f"dev{i}"
+            tree.insert("", "end", iid=dev_id, text=dev.label, open=False)
+            self._usb_tree_data[dev_id] = (dev, None)
+            for j, iface in enumerate(dev.interfaces):
+                iface_id = f"dev{i}_if{j}"
+                tree.insert(dev_id, "end", iid=iface_id, text=iface.label)
+                self._usb_tree_data[iface_id] = (dev, iface)
 
     # -- status polling ------------------------------------------------------
     def _start_poller(self) -> None:

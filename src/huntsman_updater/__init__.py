@@ -1,7 +1,7 @@
 """Independent firmware updater for the Razer Huntsman V3 Pro Mini."""
 
 from . import (constants, config, device, dfu, elevate, firmware, frame,
-               region, resources, settings, status, transport, updater)
+               region, resources, settings, status, transport, updater, usbdev)
 from .constants import (
     RAZER_VID,
     APP_PID,
@@ -25,6 +25,7 @@ __all__ = [
     "status",
     "transport",
     "updater",
+    "usbdev",
     "RAZER_VID",
     "APP_PID",
     "BOOTLOADER_PID",

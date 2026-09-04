@@ -91,7 +91,10 @@ huntsman-updater-gui
   checkbox that reveals a second file picker when checked;
 - an **Advanced…** settings dialog lets you override the automatic device
   selection — enter a custom VID, application/bootloader PID, and interface
-  numbers when the device enumerates with non-default IDs.
+  numbers when the device enumerates with non-default IDs.  It also shows a
+  foldable tree of every visible USB device (and its interfaces/capabilities)
+  with a **Refresh** button; selecting a device or interface fills the fields
+  automatically.
 
 The window is compact (minimum 420×340) so it fits small screens.
 
