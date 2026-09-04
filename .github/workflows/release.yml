@@ -20,8 +20,8 @@ jobs:
           - os: windows-latest
             suffix: windows-x86_64
             install_hidapi: "true"
-          - os: macos-13
-            suffix: macos-x86_64
+          - os: macos-latest
+            suffix: macos-arm64
             install_hidapi: "true"
     runs-on: ${{ matrix.os }}
     steps:
