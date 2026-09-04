@@ -97,40 +97,39 @@ def _send_packet(dev, packet: bytes) -> None:
 
 
 def stream_firmware(dev, app_image: bytes,
-                    header: bytes | None = None,
                     preface: bytes = b"",
                     progress=None) -> None:
     """Stream the application image to the bootloader as START/DATA/END.
 
-    The START packet carries the payload size (``len(app_image)``) and the
-    32-byte firmware-file header.  The secondary FlashFW image is a separate
-    concern and is *not* part of this stream.
+    The original engine reads a firmware file as ``[32-byte header][payload]``:
+    the first 32 bytes (the Cortex-M33 vector table) go into the START packet
+    at ``[12..43]``, and the remaining ``file_size - 32`` bytes are streamed as
+    DATA packets.  ``preface`` is an optional fixed blob appended to the START
+    payload.
     """
     if len(app_image) != C.APP_IMAGE_SIZE:
         raise ValueError(
             f"application image must be {C.APP_IMAGE_SIZE} bytes, got "
             f"{len(app_image)}")
 
-    if header is None:
-        header = b"\x00" * C.START_HEADER_LEN
-    if len(header) != C.START_HEADER_LEN:
-        raise ValueError("START header must be 32 bytes")
+    header = app_image[:C.START_HEADER_LEN]
+    body = app_image[C.START_HEADER_LEN:]
 
     counter = 0
-    start = dfu.build_start_packet(counter, len(app_image), header, preface)
+    start = dfu.build_start_packet(counter, len(body), header, preface)
     _send_packet(dev, start)
     counter += 1
 
     checksum = 0
-    for off in range(0, len(app_image), C.DATA_CHUNK_SIZE):
-        data = app_image[off:off + C.DATA_CHUNK_SIZE]
+    for off in range(0, len(body), C.DATA_CHUNK_SIZE):
+        data = body[off:off + C.DATA_CHUNK_SIZE]
         checksum = dfu.accumulate_checksum(checksum, data)
         _send_packet(dev, dfu.build_data_packet(counter, data))
         counter += 1
         if progress is not None:
-            progress(min(off + len(data), len(app_image)), len(app_image))
+            progress(min(off + len(data), len(body)), len(body))
 
-    _send_packet(dev, dfu.build_end_packet(counter, checksum, len(app_image)))
+    _send_packet(dev, dfu.build_end_packet(counter, checksum, len(body)))
 
 
 def _feature_command(dev, report: bytes, timeout_ms: int = 3000) -> bytes:

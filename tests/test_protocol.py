@@ -169,9 +169,17 @@ def test_stream_firmware_sequence():
     # first packet is START ('1'), then DATA ('2') chunks, then END ('3')
     assert commands[0] == C.DFU_CMD_START
     assert C.DFU_CMD_END in commands
-    assert commands.count(C.DFU_CMD_DATA) == C.APP_IMAGE_SIZE // C.DATA_CHUNK_SIZE
+    body = C.APP_IMAGE_SIZE - C.START_HEADER_LEN
+    expected_data = (body + C.DATA_CHUNK_SIZE - 1) // C.DATA_CHUNK_SIZE
+    assert commands.count(C.DFU_CMD_DATA) == expected_data
     # every write is a 65-byte output report (report id 0 + 64 payload)
     assert all(len(w) == C.DFU_REPORT_LEN for w in dev.writes)
+
+    # the START packet header carries the first 32 image bytes (vector table)
+    first = dev.writes[0]
+    off = 1 + C.DFU_START_HEADER   # report id + 12-byte START header prefix
+    hdr = first[off:off + C.START_HEADER_LEN]
+    assert hdr == app[:C.START_HEADER_LEN]
 
 
 def test_full_update_orchestration():
