@@ -234,6 +234,28 @@ structure is **confirmed** from `FUN_10006650`:
 - The secondary FlashFW image is a **separate** payload (`flashfw.bin` /
   `FlashFWSector*`) flashed by a distinct route, not part of this stream.
 
+### 7.2 Secondary "flash FW" route (region protocol)
+
+The secondary image (`FlashFWSector*`, 37408 bytes) is the firmware for the
+secondary controller (the "7203" Optical-ASIC part referenced by the app
+firmware's Flexcomm3 SPI bridge). The .NET layer flashes it through the main
+MCU using a distinct, region-based protocol rather than the DFU stream:
+
+1. `UpdateENCCFG("flashfw.bin", …)` rewrites `update_config.ini` with
+   `[BIN_FILE] upgrade_file=flashfw.bin` and
+   `[BOOTDEVICE_INFO] bootdev_info=vid_{VID}&pid_{PID}&mi_05`, then the image
+   is written to `\update\flashfw.bin`.
+2. The region workers (`SetFlashRegionIDList`, `SetFlashRegionData`,
+   `ProgramSTMFlashFW`) drive a `SendCmd`-based command exchange over the
+   91-byte feature-report channel, carrying per-region metadata — `RegionID`
+   (starting at 1), `type`, and `packetsize` (e.g. `0x50`) — to address the
+   secondary controller's flash regions.
+3. Verification uses the WinUSB control-transfer channel (`0x83`,
+   `callWinusbChecksumControl`) to read back a 16-bit checksum.
+
+This route is **observed** but not yet fully re-implemented; its exact
+`SendCmd` command bytes remain an open item.
+
 The firmware filename embeds a version (`%04x`) and a checksum (`%08x`), e.g.
 `..._v2.1.0_E888780F.enc`. The host parses the `0x30`-offset `"getv"` magic in
 the firmware file header to validate it before streaming.
@@ -256,8 +278,8 @@ Progress/state callbacks use the `UPDATE_STATE` values
 
 - The exact 32-byte firmware-file header content and the 420/448-byte START
   packet preface.
-- The FlashFW (`FlashFWSector`) flashing route (a separate `flashfw.bin`
-  payload) and its encryption scheme.
+- The FlashFW region-protocol command bytes (the `SendCmd` region metadata
+  encoding) and the `flashfw.bin` encryption scheme.
 - The bootloader's flash region/address map (where the app image is written).
 
 ## 10. Scope
