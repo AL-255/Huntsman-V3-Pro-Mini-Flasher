@@ -119,3 +119,45 @@ def test_dfu_reports():
     f = frame.parse_frame(region.build_dfu_verify_report(64, 0x1000))
     assert f[C.FRAME_OPCODE] == region.OPCODE_DFU_VERIFY
     assert f[8] == 64
+
+
+class _FakeBootloader:
+    """Emulates the bootloader's 65-byte report ACK behaviour."""
+
+    def __init__(self):
+        self.writes = []
+
+    def write(self, data):
+        self.writes.append(bytes(data))
+        return len(data)
+
+    def read(self, length, timeout_ms=0):
+        # echo the command and ACK each chunk, DONE on the final chunk of a
+        # packet (the caller re-reads per 64-byte chunk).
+        last = self.writes[-1]
+        cmd = last[1] if len(last) > 1 else 0
+        # last chunk of a packet is the one that does not fill 64 payload bytes
+        # after accounting for the report id; approximate: always DONE.
+        payload = bytearray(64)
+        payload[0] = cmd
+        payload[8] = C.DFU_RESP_ACK
+        return b"\x00" + bytes(payload)
+
+    def close(self):
+        pass
+
+
+def test_stream_firmware_sequence():
+    from huntsman_updater import updater
+
+    app = bytes(C.APP_IMAGE_SIZE)
+    dev = _FakeBootloader()
+    updater.stream_firmware(dev, app, progress=None)
+
+    commands = [w[1] for w in dev.writes if len(w) > 1]
+    # first packet is START ('1'), then DATA ('2') chunks, then END ('3')
+    assert commands[0] == C.DFU_CMD_START
+    assert C.DFU_CMD_END in commands
+    assert commands.count(C.DFU_CMD_DATA) == C.APP_IMAGE_SIZE // C.DATA_CHUNK_SIZE
+    # every write is a 65-byte output report (report id 0 + 64 payload)
+    assert all(len(w) == C.DFU_REPORT_LEN for w in dev.writes)

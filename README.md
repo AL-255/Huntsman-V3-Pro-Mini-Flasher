@@ -20,16 +20,58 @@ re-implements it as a standalone, scriptable updater.
 - `tools/` — analysis tooling used to produce the evidence above:
   - `dump_dotnet.py` — .NET metadata / P/Invoke / IL dumper.
   - `ghidra_scripts/DecompileNamed.java` — targeted Ghidra headless decompiler.
-- `src/` — the new updater implementation (work in progress).
-
-## Status
-
-Reverse engineering is substantially complete and documented in
-`analysis/PROTOCOL.md`. The implementation is under construction.
+- `src/huntsman_updater/` — the updater package.
+- `tests/` — unit tests for the pure protocol logic.
 
 ## Device facts
 
 - Application mode: USB `1532:02B0` (HID config interface `mi_05`).
 - Bootloader mode: USB `1532:110E` (bcdDevice `0x02B0`).
+  - Entered by the host `SET_MODE` command, **or manually by plugging the USB
+    cable in while holding `Fn`.**
 - Application firmware: 128 KiB image, RAM-resident at `0x20000000`.
-- Secondary flash firmware: 37408 bytes (optionally encrypted).
+- Secondary flash firmware: 37408 bytes (the "7203" Optical-ASIC controller).
+
+## Implemented
+
+| Capability | Module | Status |
+| --- | --- | --- |
+| Enter bootloader (`SET_MODE 0x04`) | `frame`, `updater` | byte-confirmed |
+| Application-image DFU (`START/DATA/END` over 65-byte reports) | `dfu`, `updater` | byte-confirmed |
+| Bootloader `getv` version query | `dfu` | confirmed |
+| Device-info polling (version/serial/capability/mode/build/…) | `device` | confirmed |
+| Secondary FlashFW region protocol (channel `0x0a`) | `region` | command encoders confirmed |
+| Secondary FlashFW DFU (channel `0x10`) | `region` | command encoders confirmed |
+| `DeviceUpdater.resources` parsing | `resources` | verified against real firmware |
+| HID transport (hidapi + Linux hidraw) | `transport` | — |
+
+## Usage
+
+```sh
+# install (optionally with the hidapi backend)
+pip install -e .[hid]
+
+# show what's in a DeviceUpdater.resources
+huntsman-updater info DeviceUpdater.resources
+
+# poll device information
+huntsman-updater device-info
+
+# flash both images (enters the bootloader automatically)
+huntsman-updater flash DeviceUpdater.resources
+
+# flash, assuming the device is already in the bootloader (Fn + USB)
+huntsman-updater flash DeviceUpdater.resources --no-enter-boot
+```
+
+## Known limitations
+
+- The 32-byte firmware-file header carried in the DFU `START` packet is a
+  zero-filled placeholder: the original `.enc` envelope is not present in the
+  extracted artifacts, so its exact bytes could not be recovered.
+- The secondary FlashFW erase/program/verify **sequencing** is reconstructed
+  from the .NET worker IL and is best-effort; it has not been verified
+  on-device.
+- The `flashfw.bin` **encryption** (`encryption_en=1`) is not re-implemented.
+- Nothing has been exercised against a physical keyboard (no device available
+  in this environment).
