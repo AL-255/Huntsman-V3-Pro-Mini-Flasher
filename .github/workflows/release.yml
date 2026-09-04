@@ -1,5 +1,7 @@
 name: release
 
+# Only build + publish when a version tag (v*) is pushed.  Branch pushes,
+# including pushes to main, do NOT trigger this workflow.
 on:
   push:
     tags:
