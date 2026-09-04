@@ -1,0 +1,9 @@
+# Vendored Python analysis libraries (pefile, dnfile, dncil)
+.tools/lib/
+
+# Ghidra working projects and JVM scratch
+ghidra-work/
+
+# Python bytecode and caches
+__pycache__/
+*.pyc

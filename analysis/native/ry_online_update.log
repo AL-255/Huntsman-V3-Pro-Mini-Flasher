@@ -1,0 +1,57 @@
+openjdk version "21.0.12" 2026-07-21 LTS
+OpenJDK Runtime Environment Temurin-21.0.12+8 (build 21.0.12+8-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.12+8 (build 21.0.12+8-LTS, mixed mode)
+INFO  Using log config file: jar:file:/home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/ghidra-work/config/yukidama-ghidra/ghidra_12.1.2_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/ghidra-work/config/yukidama-ghidra/ghidra_12.1.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (540 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Starting cache cleanup: /var/tmp/yukidama-ghidra/fscache2 (FileCacheMaintenanceDaemon)  
+INFO  Finished cache cleanup, estimated storage used: 0 (FileCacheMaintenanceDaemon)  
+ERROR Unable to write file cache maintenance file: /var/tmp/yukidama-ghidra/fscache2/.lastmaint (FileCacheMaintenanceDaemon) java.io.FileNotFoundException: /var/tmp/yukidama-ghidra/fscache2/.lastmaint (Read-only file system)
+	at java.base/java.io.FileOutputStream.open0(Native Method)
+	at java.base/java.io.FileOutputStream.open(FileOutputStream.java:289)
+	at java.base/java.io.FileOutputStream.<init>(FileOutputStream.java:230)
+	at java.base/java.io.FileOutputStream.<init>(FileOutputStream.java:179)
+	at java.base/java.io.FileWriter.<init>(FileWriter.java:98)
+	at utilities.util.FileUtilities.writeStringToFile(FileUtilities.java:821)
+	at ghidra.formats.gfilesystem.FileCache$FileCacheMaintenanceDaemon.run(FileCache.java:343)
+ 
+INFO  Headless startup complete (1225 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 59 extension points (20 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/tools/ghidra_scripts
+    /home/yukidama/Applications/ghidra_12.1.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/ghidra-work/proj_ryonline/huntsman (HeadlessAnalyzer)  
+INFO  Opening project: /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/ghidra-work/proj_ryonline/huntsman (HeadlessProject)  
+INFO  REPORT: Processing project file: /Ry_Online_Update_Dll_ouput_v1.0.1.dll (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DecompileNamed.java '/home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/analysis/native/ry_online_update' '4' 'appUpdateFirmware,chipGoToBootFirmware,userSetCfgFilePath'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/tools/ghidra_scripts/DecompileNamed.java (HeadlessAnalyzer)  
+INFO  DecompileNamed.java> Wrote 206 functions for Ry_Online_Update_Dll_ouput_v1.0.1.dll to /home/yukidama/Downloads/HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1/updater/analysis/native/ry_online_update (GhidraScript)  
+INFO  REPORT: Save succeeded for processed file: /Ry_Online_Update_Dll_ouput_v1.0.1.dll (HeadlessAnalyzer)  
