@@ -18,8 +18,12 @@ APP_DFU_INTERFACE = 5      # 64-byte I/O ("mi_05") interface
 
 # Bootloader mode: after the "enter bootloader" command the LPC5528 reboots
 # and re-enumerates with this PID (device descriptor bcdDevice == 0x02B0).
+# The bootloader exposes a single interface (0) carrying the 90-byte HID
+# feature report; it has no interrupt endpoints, so it is reached through the
+# raw usbdevfs backend (SET_REPORT/GET_REPORT).
 BOOTLOADER_PID = 0x110E
 BOOTLOADER_BCD_DEVICE = 0x02B0
+BOOTLOADER_INTERFACE = 0
 
 # --- Application-mode command frame ----------------------------------------
 # The keyboard exposes a 91-byte HID *feature* report: one report-id byte (0)
@@ -122,3 +126,9 @@ APP_IMAGE_SIZE = 0x20000          # 128 KiB application image
 APP_RAM_LOAD_ADDRESS = 0x20000000  # RAM-resident execution address
 DATA_CHUNK_SIZE = 0x200           # 512-byte DFU data chunks
 START_HEADER_LEN = 0x20           # 32-byte header carried in the START packet
+
+# Bootloader channel-0x10 DFU (the real application-flash path, confirmed from
+# FWUpdaterDLL::DFUErase/DFUProgram/DFUVerify).  The .NET orchestrator erases
+# the whole ``[APP_RAM_LOAD_ADDRESS, APP_RAM_LOAD_ADDRESS + APP_IMAGE_SIZE)``
+# region and streams the image in ``Common.PACKLEN`` = 64-byte program chunks.
+APP_DFU_PACKLEN = 64

@@ -175,7 +175,9 @@ def _open_hidraw(vid: int, pid: int, interface: int | None):
             self._fd = fd
 
         def get_feature_report(self, report_id, length):
-            buf = bytearray(length + 1)
+            # The buffer must be exactly the feature-report size (report id +
+            # payload), otherwise the kernel shifts the frame by one byte.
+            buf = bytearray(length)
             buf[0] = report_id
             fcntl.ioctl(self._fd, _ioc(0x07, len(buf)), buf, True)  # HIDIOCGFEATURE
             return bytes(buf)

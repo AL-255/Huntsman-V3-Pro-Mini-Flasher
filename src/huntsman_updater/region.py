@@ -92,34 +92,49 @@ def parse_region_list_response(report: bytes) -> dict:
 
 # --- channel 0x10 secondary-flash DFU --------------------------------------
 
-def build_dfu_report(opcode: int, payload: bytes) -> bytes:
-    """Build a channel-0x10 DFU feature report."""
+def build_dfu_report(opcode: int, payload: bytes,
+                     payload_count: int | None = None) -> bytes:
+    """Build a channel-0x10 DFU feature report.
+
+    ``payload_count`` defaults to ``len(payload)``.  The original
+    ``FWUpdaterDLL`` fixes this field per opcode rather than deriving it from
+    the payload length (see ``analysis/native/fwupdaterdll/DFU*.c``):
+
+    * erase   — 8  (4-byte address + 4-byte size)
+    * program — 8  (fixed; the data length lives at payload byte 0)
+    * verify  — 5  (1-byte length + 4-byte address)
+    * abort/exit — 0
+    """
     f = frame.build_frame(CHANNEL_DFU, opcode, payload,
-                          payload_count=len(payload))
+                          payload_count=payload_count)
     return frame.to_report(f)
 
 
 def build_dfu_erase_report(address: int, size: int) -> bytes:
     """Erase ``size`` bytes at ``address`` (big-endian address + size)."""
     payload = struct.pack(">II", address & 0xFFFFFFFF, size & 0xFFFFFFFF)
-    return build_dfu_report(OPCODE_DFU_ERASE, payload)
+    return build_dfu_report(OPCODE_DFU_ERASE, payload, payload_count=8)
 
 
 def build_dfu_program_report(data: bytes, address: int) -> bytes:
-    """Program ``data`` at ``address`` (1-byte length + BE address + data)."""
+    """Program ``data`` at ``address`` (1-byte length + BE address + data).
+
+    The length byte is ``len(data)``; the frame's payload-count field is the
+    fixed value 8 used by ``FWUpdaterDLL::DFUProgram``.
+    """
     payload = bytes([len(data) & 0xFF]) + struct.pack(">I", address) + data
-    return build_dfu_report(OPCODE_DFU_PROGRAM, payload)
+    return build_dfu_report(OPCODE_DFU_PROGRAM, payload, payload_count=8)
 
 
 def build_dfu_verify_report(length: int, address: int) -> bytes:
     """Verify ``length`` bytes at ``address`` (1-byte length + BE address)."""
     payload = bytes([length & 0xFF]) + struct.pack(">I", address)
-    return build_dfu_report(OPCODE_DFU_VERIFY, payload)
+    return build_dfu_report(OPCODE_DFU_VERIFY, payload, payload_count=5)
 
 
 def build_dfu_abort_report() -> bytes:
-    return build_dfu_report(OPCODE_DFU_ABORT, b"")
+    return build_dfu_report(OPCODE_DFU_ABORT, b"", payload_count=0)
 
 
 def build_dfu_exit_report() -> bytes:
-    return build_dfu_report(OPCODE_DFU_EXIT, b"")
+    return build_dfu_report(OPCODE_DFU_EXIT, b"", payload_count=0)

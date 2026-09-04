@@ -335,8 +335,12 @@ worker chain) proceeds in this order:
 2. **Enter the bootloader** — `EnterBLMode()` → `SET_MODE` (`0x04`) on the
    application device, which resets into the bootloader (`1532:110E`).
 3. **Flash the application image** — `chipGoToBootFirmware` (find device,
-   verify serial) then `appUpdateFirmware` (the DFU START/DATA/END stream over
-   65-byte reports, §4).
+   verify serial) then, on the bootloader, the channel-`0x10` DFU family
+   (`EraseFW` → `DFUErase`, `ProgramFW` → `DFUProgram`, `VerifyFW` →
+   `DFUVerify`, then `ExitBL` → `DFUExit`) over the 91-byte feature report.
+   The whole ``[0x20000000, 0x20020000)`` RAM window is erased and the image is
+   programmed in 64-byte chunks (``Common.PACKLEN``).  **Verified on-device**
+   (Huntsman V3 Pro Mini, 1.04 → 2.01.00).
 4. The device reboots back into application mode.
 5. **Flash the secondary image** — the region workers query/set the region
    list and stream `flashfw.bin` (channel `0x0a`, §7.2), then erase/program/
@@ -352,9 +356,9 @@ worker chain) proceeds in this order:
 - The `flashfw.bin` encryption scheme (no standard crypto is linked into the
   updater binaries; the `.enc` envelope is not present in the extracted
   artifacts).
-- The bootloader's flash region/address map (where the app image is written).
-- On-device verification (no physical keyboard is available in this
-  environment).
+- The secondary FlashFW (region `0x0a` + channel-`0x10` DFU) on-device
+  sequencing — the application-image flash is verified, but the secondary
+  image path has not been exercised on hardware.
 
 ## 10. Scope
 

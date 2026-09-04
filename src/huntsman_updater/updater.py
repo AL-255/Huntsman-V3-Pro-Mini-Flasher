@@ -41,17 +41,20 @@ def enter_bootloader(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
 
 
 def wait_for_device(vid: int = C.RAZER_VID, pid: int = C.BOOTLOADER_PID,
+                    interface: int | None = None,
                     timeout_s: float = 30.0) -> "transport.HidDevice":
     """Poll until a HID device (``vid:pid``) appears, then open it.
 
-    Used to await the bootloader (``1532:110E``) after entering it and to await
-    the application device (``1532:02B0``) after the post-flash reboot.
+    Used to await the bootloader (``1532:110E``, interface 0) after entering it
+    and to await the application device (``1532:02B0``, interface 3) after the
+    post-flash reboot.  The bootloader has no interrupt endpoints, so it is
+    matched through the usbdevfs backend which needs the interface number.
     """
     deadline = time.monotonic() + timeout_s
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            return transport.open_by_interface(vid, pid, None)
+            return transport.open_by_interface(vid, pid, interface)
         except transport.TransportError as exc:  # noqa: PERF203
             last_error = exc
             time.sleep(0.5)
@@ -176,29 +179,115 @@ def flash_secondary(dev, flash_image: bytes, packet_size: int = 0x50,
         _feature_command(dev, region.build_dfu_program_report(chunk, off))
 
 
+def _dfu_send(dev, report: bytes, timeout_s: float = 8.0,
+              poll_interval: float = 0.05) -> bytes:
+    """Send a bootloader DFU feature report and poll for a settled response.
+
+    The bootloader processes frames asynchronously: a response whose status is
+    ``STATUS_NEW``/``STATUS_BUSY`` means the operation is still in flight, so
+    we re-read the feature report until it settles (mirrors the
+    ``FWUpdaterDLL`` send loop, which polls up to ``param_3`` times).
+    """
+    dev.send_feature_report(report)
+    deadline = time.monotonic() + timeout_s
+    response = b""
+    while time.monotonic() < deadline:
+        response = dev.get_feature_report(0, C.FEATURE_REPORT_LEN)
+        if len(response) <= 1 + C.FRAME_STATUS:
+            time.sleep(poll_interval)
+            continue
+        status = response[1 + C.FRAME_STATUS]
+        if status not in (C.STATUS_NEW, C.STATUS_BUSY):
+            break
+        time.sleep(poll_interval)
+    return response
+
+
+def _dfu_status(response: bytes) -> int:
+    if len(response) <= 1 + C.FRAME_STATUS:
+        return -1
+    return response[1 + C.FRAME_STATUS]
+
+
+def flash_app_image(dev, app_image: bytes, progress=None) -> None:
+    """Flash the application image through bootloader channel-0x10 DFU.
+
+    Replicates the original .NET workers:
+
+    1. ``DFUErase(StartAddr, EndAddr)``  — erase the 128 KiB app region;
+    2. ``DFUProgram`` in 64-byte chunks  — stream the image;
+    3. ``DFUExit``                        — reboot back into application mode.
+
+    The address range is ``[0x20000000, 0x20020000)`` — the RAM-resident
+    execution window the image's Intel HEX records target (confirmed against
+    ``Talia_T1_60%_7203_App_FW_v2.1.0_E888780F.hex``).
+    """
+    from . import region
+
+    if len(app_image) != C.APP_IMAGE_SIZE:
+        raise ValueError(
+            f"application image must be {C.APP_IMAGE_SIZE} bytes, got "
+            f"{len(app_image)}")
+
+    start = C.APP_RAM_LOAD_ADDRESS
+    end = start + len(app_image)
+
+    # 1. Erase the application region.
+    resp = _dfu_send(dev, region.build_dfu_erase_report(start, end),
+                     timeout_s=15.0)
+    if _dfu_status(resp) != C.STATUS_SUCCESS:
+        raise transport.TransportError(
+            f"DFU erase failed (status {_dfu_status(resp)})")
+
+    # 2. Program the image in 64-byte chunks.
+    total = len(app_image)
+    for off in range(0, total, C.APP_DFU_PACKLEN):
+        chunk = app_image[off:off + C.APP_DFU_PACKLEN]
+        resp = _dfu_send(dev, region.build_dfu_program_report(chunk, start + off))
+        if _dfu_status(resp) != C.STATUS_SUCCESS:
+            raise transport.TransportError(
+                f"DFU program @ {start + off:#010x} failed "
+                f"(status {_dfu_status(resp)})")
+        if progress is not None:
+            progress(min(off + len(chunk), total), total)
+
+    # 3. Reboot into application mode.  The device resets while handling the
+    # exit command, so the feature-report read may fail — that is expected.
+    try:
+        dev.send_feature_report(region.build_dfu_exit_report())
+    except Exception:  # noqa: BLE001 - device reboots mid-transfer
+        pass
+
+
 def update(package, enter_boot: bool = True, flash_fw: bool = True,
            progress=None) -> None:
-    """Run the full update: enter bootloader, flash the app image, then the
-    secondary FlashFW image (best-effort).
+    """Flash the application image over the bootloader channel-0x10 DFU.
 
-    ``flash_fw`` toggles the secondary image flashing; its sequencing is
-    reconstructed from the .NET workers and remains to be verified on-device.
+    Flow: enter the bootloader, open its single 90-byte feature-report
+    interface, erase/program/exit, then wait for the device to re-enumerate in
+    application mode.  ``flash_fw`` currently toggles the secondary FlashFW
+    image path, whose sequencing is still best-effort.
     """
     if enter_boot:
         enter_bootloader(C.RAZER_VID, package.pid, C.APP_CONFIG_INTERFACE)
-        dev = wait_for_device(C.RAZER_VID, package.bootloader_pid)
+        dev = wait_for_device(C.RAZER_VID, package.bootloader_pid,
+                              interface=C.BOOTLOADER_INTERFACE)
     else:
-        dev = transport.open_by_interface(C.RAZER_VID, package.bootloader_pid, None)
+        dev = transport.open_by_interface(
+            C.RAZER_VID, package.bootloader_pid, C.BOOTLOADER_INTERFACE)
 
     try:
-        stream_firmware(dev, package.app_image, progress=progress)
+        flash_app_image(dev, package.app_image, progress=progress)
     finally:
         dev.close()
 
+    # DFUExit reboots the device back into application mode.
+    wait_for_device(C.RAZER_VID, package.pid,
+                    interface=C.APP_CONFIG_INTERFACE).close()
+
     if flash_fw and package.flash_image:
-        # The device reboots back into application mode after the app image is
-        # flashed; the secondary image is then pushed through its bridge.
-        dev = wait_for_device(C.RAZER_VID, package.pid)
+        dev = wait_for_device(C.RAZER_VID, package.pid,
+                              interface=C.APP_CONFIG_INTERFACE)
         try:
             flash_secondary(dev, package.flash_image, progress=progress)
         finally:

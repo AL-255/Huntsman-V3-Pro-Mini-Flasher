@@ -207,7 +207,26 @@ def test_full_update_orchestration():
         def close(self):
             pass
 
-    boot = _FakeBootloader()
+    class _FakeBootDFU:
+        """Fake bootloader-mode device (90-byte feature-report channel)."""
+        def __init__(self):
+            self.sent = []
+        def send_feature_report(self, d):
+            self.sent.append(bytes(d))
+            return len(d)
+        def get_feature_report(self, rid, length):
+            f = bytearray(C.COMMAND_FRAME_LEN)
+            f[C.FRAME_STATUS] = C.STATUS_SUCCESS
+            f[C.FRAME_CHANNEL] = region.CHANNEL_DFU
+            return b"\x00" + bytes(f)
+        def write(self, d):
+            return len(d)
+        def read(self, l, timeout_ms=0):
+            return b""
+        def close(self):
+            pass
+
+    boot = _FakeBootDFU()
     app = _FakeApp()
     opened = []
 
@@ -232,8 +251,17 @@ def test_full_update_orchestration():
     assert pids[0] == C.APP_PID          # enter-bootloader SET_MODE
     assert C.BOOTLOADER_PID in pids       # app-image DFU
     assert pids[-1] == C.APP_PID          # FlashFW phase
-    # bootloader got the DFU stream; app got SET_MODE then FlashFW commands
-    assert boot.writes
+    # bootloader got the channel-0x10 DFU: erase, program chunks, exit
+    assert boot.sent
+    bframes = [frame.parse_frame(r) for r in boot.sent]
+    assert bframes[0][C.FRAME_OPCODE] == region.OPCODE_DFU_ERASE
+    assert bframes[1][C.FRAME_OPCODE] == region.OPCODE_DFU_PROGRAM
+    assert bframes[-1][C.FRAME_OPCODE] == region.OPCODE_DFU_EXIT
+    # the erase frame carries [start, end) as two big-endian u32
+    assert bframes[0][8:12] == _struct.pack(">I", C.APP_RAM_LOAD_ADDRESS)
+    assert bframes[0][12:16] == _struct.pack(
+        ">I", C.APP_RAM_LOAD_ADDRESS + C.APP_IMAGE_SIZE)
+    # app got SET_MODE then FlashFW commands
     assert app.sent
     assert frame.parse_frame(app.sent[0])[7] == C.OPCODE_ENTER_DEVICE_MODE
     # after SET_MODE, the app device serves FlashFW: region info (0x80) then list
