@@ -245,16 +245,25 @@ MCU using a distinct, region-based protocol rather than the DFU stream:
    `[BIN_FILE] upgrade_file=flashfw.bin` and
    `[BOOTDEVICE_INFO] bootdev_info=vid_{VID}&pid_{PID}&mi_05`, then the image
    is written to `\update\flashfw.bin`.
-2. The region workers (`SetFlashRegionIDList`, `SetFlashRegionData`,
-   `ProgramSTMFlashFW`) drive a `SendCmd`-based command exchange over the
-   91-byte feature-report channel, carrying per-region metadata — `RegionID`
-   (starting at 1), `type`, and `packetsize` (e.g. `0x50`) — to address the
-   secondary controller's flash regions.
+2. The region workers drive a `SendCmd`-based command exchange over the
+   91-byte feature-report channel on **channel `0x0a`** (**confirmed** from the
+   .NET worker IL):
+
+   | Command | Opcode | Report bytes | Payload |
+   | --- | --- | --- | --- |
+   | region list | `0x00` | channel `0x0a`, payload_count = payload len | `[total, RegionID, type, packetsize]` (16-bit LE each) |
+   | region data | `0x02` | channel `0x0a`, `frame[2..3] = 0xff 0xff`, payload_count = chunk len | one chunk of `flashfw.bin` |
+
+   The region-list **response** is a 16-bit-element array:
+   `[0]=total`, `[1]=RegionID`, `[2]=type`, and `region_size` assembled from
+   elements 4..7 as `el[4]<<24 | el[5]<<16 | el[6]<<8 | el[7]` (equals the
+   FlashFW size, 37408 bytes).
 3. Verification uses the WinUSB control-transfer channel (`0x83`,
    `callWinusbChecksumControl`) to read back a 16-bit checksum.
 
-This route is **observed** but not yet fully re-implemented; its exact
-`SendCmd` command bytes remain an open item.
+The region-list and region-data command encoders are implemented in
+`src/huntsman_updater/region.py`; the full erase/program/verify sequencing is
+the remaining open item.
 
 The firmware filename embeds a version (`%04x`) and a checksum (`%08x`), e.g.
 `..._v2.1.0_E888780F.enc`. The host parses the `0x30`-offset `"getv"` magic in

@@ -28,18 +28,23 @@ def checksum(frame: bytes) -> int:
 
 
 def build_frame(channel: int, opcode: int, payload: bytes = b"",
-                payload_count: int | None = None) -> bytes:
+                payload_count: int | None = None,
+                header: bytes = b"") -> bytes:
     """Build a 90-byte command frame for a request.
 
     ``payload_count`` defaults to ``len(payload)``.  The payload must fit in
-    the 80-byte field (offsets 8..87).
+    the 80-byte field (offsets 8..87).  ``header`` fills frame bytes 2..4 (the
+    generic ``FWUpdaterDLL::SendCmd`` b3/b4 bytes), up to 3 bytes.
     """
     if len(payload) > 80:
         raise ValueError("command payload exceeds 80 bytes")
+    if len(header) > 3:
+        raise ValueError("command header exceeds 3 bytes")
     if payload_count is None:
         payload_count = len(payload)
     frame = bytearray(C.COMMAND_FRAME_LEN)
     frame[C.FRAME_STATUS] = C.STATUS_NEW
+    frame[2:2 + len(header)] = header
     frame[C.FRAME_PAYLOAD_COUNT] = payload_count & 0xFF
     frame[C.FRAME_CHANNEL] = channel & 0xFF
     frame[C.FRAME_OPCODE] = opcode & 0xFF
