@@ -15,7 +15,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from . import constants as C
 from . import status, transport, updater
-from .firmware import parse_intel_hex, validate_app_image, validate_flash_image
+from .firmware import (parse_intel_hex, validate_app_image,
+                       validate_flash_image)
 from .resources import FirmwarePackage, load_firmware_package
 
 POLL_INTERVAL_MS = 2000
@@ -69,7 +70,7 @@ class HuntsmanUpdaterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Huntsman V3 Pro Mini Updater")
-        self.root.minsize(620, 520)
+        self.root.minsize(420, 340)
 
         self._status_q: queue.Queue = queue.Queue()
         self._work_q: queue.Queue = queue.Queue()
@@ -83,37 +84,40 @@ class HuntsmanUpdaterApp:
 
     # -- widget construction -------------------------------------------------
     def _build_widgets(self) -> None:
-        pad = {"padx": 8, "pady": 4}
+        pad = {"padx": 4, "pady": 2}
 
         status_frame = ttk.LabelFrame(self.root, text="Device status")
-        status_frame.pack(fill="x", padx=8, pady=6)
-
-        self._status_labels: dict[str, ttk.Label] = {}
-        rows = [
-            ("mode", "Mode:"),
-            ("serial", "Serial number:"),
-            ("version", "Firmware version:"),
-            ("ext", "Extended version:"),
-            ("capability", "Capability:"),
-            ("build", "Build:"),
-        ]
-        for key, caption in rows:
-            ttk.Label(status_frame, text=caption).grid(
-                row=len(self._status_labels), column=0, sticky="w", **pad)
-            lbl = ttk.Label(status_frame, text="—")
-            lbl.grid(row=len(self._status_labels), column=1, sticky="w", **pad)
-            self._status_labels[key] = lbl
+        status_frame.pack(fill="x", padx=6, pady=4)
         status_frame.columnconfigure(1, weight=1)
+        status_frame.columnconfigure(3, weight=1)
+
+        # Six fields laid out in two side-by-side columns so the frame stays
+        # short enough for small screens.
+        self._status_labels: dict[str, ttk.Label] = {}
+        for row, (key, caption) in enumerate([
+                ("mode", "Mode"), ("serial", "Serial"), ("version", "Version")]):
+            ttk.Label(status_frame, text=caption).grid(
+                row=row, column=0, sticky="w", **pad)
+            lbl = ttk.Label(status_frame, text="—")
+            lbl.grid(row=row, column=1, sticky="w", **pad)
+            self._status_labels[key] = lbl
+        for row, (key, caption) in enumerate([
+                ("ext", "Ext. version"), ("capability", "Capability"),
+                ("build", "Build")]):
+            ttk.Label(status_frame, text=caption).grid(
+                row=row, column=2, sticky="w", **pad)
+            lbl = ttk.Label(status_frame, text="—")
+            lbl.grid(row=row, column=3, sticky="w", **pad)
+            self._status_labels[key] = lbl
 
         ttk.Button(status_frame, text="Refresh", command=self._refresh_now
-                   ).grid(row=len(rows), column=0, columnspan=2,
-                          sticky="w", **pad)
+                   ).grid(row=3, column=0, columnspan=4, sticky="w", **pad)
 
-        files_frame = ttk.LabelFrame(self.root, text="Firmware files")
-        files_frame.pack(fill="x", padx=8, pady=6)
+        files_frame = ttk.LabelFrame(self.root, text="Firmware file")
+        files_frame.pack(fill="x", padx=6, pady=4)
         files_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(files_frame, text="Application firmware:").grid(
+        ttk.Label(files_frame, text="Application image:").grid(
             row=0, column=0, sticky="w", **pad)
         self._app_path = tk.StringVar()
         ttk.Entry(files_frame, textvariable=self._app_path).grid(
@@ -121,41 +125,46 @@ class HuntsmanUpdaterApp:
         ttk.Button(files_frame, text="Browse…",
                    command=self._browse_app).grid(row=0, column=2, **pad)
 
-        ttk.Label(files_frame, text="Secondary flash firmware:").grid(
-            row=1, column=0, sticky="w", **pad)
-        self._flash_path = tk.StringVar()
-        ttk.Entry(files_frame, textvariable=self._flash_path).grid(
-            row=1, column=1, sticky="ew", **pad)
-        ttk.Button(files_frame, text="Browse…",
-                   command=self._browse_flash).grid(row=1, column=2, **pad)
-        ttk.Label(files_frame, text="(optional; leave blank to skip)").grid(
-            row=2, column=1, sticky="w", padx=8)
-
+        # Secondary firmware flashing is collapsed behind this checkbox.
         self._flash_secondary = tk.BooleanVar(value=False)
         ttk.Checkbutton(
-            files_frame, text="Also flash the secondary image",
-            variable=self._flash_secondary).grid(
-                row=3, column=1, sticky="w", **pad)
+            files_frame, text="Flash secondary firmware",
+            variable=self._flash_secondary,
+            command=self._toggle_secondary).grid(
+                row=1, column=0, columnspan=3, sticky="w", **pad)
+
+        self._secondary_row = ttk.Frame(files_frame)
+        self._secondary_row.grid(row=2, column=0, columnspan=3,
+                                 sticky="ew", **pad)
+        self._secondary_row.columnconfigure(1, weight=1)
+        ttk.Label(self._secondary_row, text="Secondary image:").grid(
+            row=0, column=0, sticky="w", **pad)
+        self._flash_path = tk.StringVar()
+        ttk.Entry(self._secondary_row, textvariable=self._flash_path).grid(
+            row=0, column=1, sticky="ew", **pad)
+        ttk.Button(self._secondary_row, text="Browse…",
+                   command=self._browse_flash).grid(row=0, column=2, **pad)
+        self._secondary_row.grid_remove()  # hidden until the box is checked
 
         actions = ttk.Frame(self.root)
-        actions.pack(fill="x", padx=8, pady=6)
+        actions.pack(fill="x", padx=6, pady=4)
         self._flash_btn = ttk.Button(actions, text="Flash firmware",
                                      command=self._start_flash)
-        self._flash_btn.pack(side="left", padx=4)
+        self._flash_btn.pack(side="left", padx=3)
         ttk.Button(actions, text="Enter bootloader",
                    command=lambda: self._run_action("enter-bootloader")
-                   ).pack(side="left", padx=4)
-        ttk.Button(actions, text="Exit bootloader (reboot to app)",
+                   ).pack(side="left", padx=3)
+        ttk.Button(actions, text="Exit bootloader",
                    command=lambda: self._run_action("exit-bootloader")
-                   ).pack(side="left", padx=4)
+                   ).pack(side="left", padx=3)
 
         self._progress = ttk.Progressbar(self.root, maximum=100)
-        self._progress.pack(fill="x", padx=8, pady=6)
+        self._progress.pack(fill="x", padx=6, pady=4)
 
         log_frame = ttk.LabelFrame(self.root, text="Log")
-        log_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
-        self._log = tk.Text(log_frame, height=8, state="disabled", wrap="word")
-        self._log.pack(fill="both", expand=True, padx=4, pady=4)
+        log_frame.pack(fill="both", expand=True, padx=6, pady=(0, 6))
+        self._log = tk.Text(log_frame, height=5, state="disabled", wrap="word")
+        self._log.pack(fill="both", expand=True, padx=3, pady=3)
 
     def _log_line(self, text: str) -> None:
         self._log.configure(state="normal")
@@ -181,6 +190,13 @@ class HuntsmanUpdaterApp:
             filetypes=[("Binary image", "*.bin"), ("All files", "*.*")])
         if path:
             self._flash_path.set(path)
+
+    def _toggle_secondary(self) -> None:
+        """Show the secondary-file row only while its checkbox is checked."""
+        if self._flash_secondary.get():
+            self._secondary_row.grid()
+        else:
+            self._secondary_row.grid_remove()
 
     # -- status polling ------------------------------------------------------
     def _start_poller(self) -> None:
@@ -256,14 +272,22 @@ class HuntsmanUpdaterApp:
                                  "Select an application firmware file first.")
             return
 
+        do_secondary = self._flash_secondary.get()
+        flash_path = self._flash_path.get().strip() if do_secondary else ""
+        if do_secondary and not flash_path:
+            messagebox.showerror(
+                "No secondary firmware selected",
+                "The \"Flash secondary firmware\" box is checked, but no "
+                "secondary image file was selected. Select one or uncheck "
+                "the box.")
+            return
+
         try:
-            pkg = load_firmware_selection(
-                app_path, self._flash_path.get().strip())
+            pkg = load_firmware_selection(app_path, flash_path)
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Bad firmware file", str(exc))
             return
 
-        do_secondary = self._flash_secondary.get() and bool(pkg.flash_image)
         if do_secondary:
             summary = (f"App image {len(pkg.app_image)} bytes + secondary "
                        f"{len(pkg.flash_image)} bytes.")
@@ -280,9 +304,8 @@ class HuntsmanUpdaterApp:
         self._flashing.set()
         self._log_line(f"Flashing {app_path} …")
 
-        threading.Thread(
-            target=self._flash_worker,
-            args=(pkg, do_secondary), daemon=True).start()
+        threading.Thread(target=self._flash_worker,
+                         args=(pkg, do_secondary), daemon=True).start()
 
     def _flash_worker(self, pkg: FirmwarePackage, do_secondary: bool) -> None:
         try:

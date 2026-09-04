@@ -83,12 +83,14 @@ huntsman-updater-gui
 - polls the device every 2 seconds and shows its **mode** (application
   `02B0` / bootloader `110E` / absent), **serial number**, **firmware
   version**, extended version, capability, and build;
-- lets you pick the firmware to flash — a `.resources` bundle, an Intel HEX
-  file, or a raw 128 KiB application `.bin` (plus an optional 37408-byte
-  secondary flash `.bin`);
-- flashes the application image (and, optionally, the secondary image) with a
-  progress bar and log, plus **Enter bootloader** / **Exit bootloader**
-  recovery buttons.
+- lets you pick the application firmware to flash — a `.resources` bundle, an
+  Intel HEX file, or a raw 128 KiB application `.bin`;
+- flashes the application image with a progress bar and log, plus
+  **Enter bootloader** / **Exit bootloader** recovery buttons.  The optional
+  secondary (FlashFW) image is hidden behind a **"Flash secondary firmware"**
+  checkbox that reveals a second file picker when checked.
+
+The window is compact (minimum 420×340) so it fits small screens.
 
 When it is launched without root/admin rights it re-launches itself elevated:
 

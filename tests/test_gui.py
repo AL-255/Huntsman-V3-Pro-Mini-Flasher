@@ -120,7 +120,7 @@ def test_load_firmware_selection_raw_bin():
         assert pkg.flash_image == b""
         assert int(pkg.metadata["VID"], 16) == C.RAZER_VID
 
-        # a secondary flash image overrides the (empty) bundle one
+        # an optional secondary flash image overrides the (empty) bundle one
         flash = Path(tmp) / "flash.bin"
         flash.write_bytes(bytes(C.FLASH_IMAGE_SIZE))
         pkg = gui.load_firmware_selection(str(app), str(flash))
