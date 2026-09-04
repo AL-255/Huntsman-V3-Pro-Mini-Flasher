@@ -172,3 +172,62 @@ def test_stream_firmware_sequence():
     assert commands.count(C.DFU_CMD_DATA) == C.APP_IMAGE_SIZE // C.DATA_CHUNK_SIZE
     # every write is a 65-byte output report (report id 0 + 64 payload)
     assert all(len(w) == C.DFU_REPORT_LEN for w in dev.writes)
+
+
+def test_full_update_orchestration():
+    """Exercise updater.update() end-to-end with fake transport devices."""
+    import struct as _struct
+    from huntsman_updater import resources as _resources
+    from huntsman_updater import updater as _updater
+    from huntsman_updater import transport as _transport
+
+    class _FakeApp:
+        """Fake application-mode device (91-byte feature reports)."""
+        def __init__(self):
+            self.sent = []
+        def send_feature_report(self, d):
+            self.sent.append(bytes(d))
+            return len(d)
+        def get_feature_report(self, rid, length):
+            payload = _struct.pack("<8H", 1, 1, 2, 0x50, 0, 0, 0x92, 0x20)
+            return frame.to_report(frame.build_frame(
+                0x0a, 0x80, payload, payload_count=len(payload)))
+        def write(self, d):
+            return len(d)
+        def read(self, l, timeout_ms=0):
+            return b""
+        def close(self):
+            pass
+
+    boot = _FakeBootloader()
+    app = _FakeApp()
+    opened = []
+
+    def fake_open(vid, pid, interface=None):
+        opened.append((vid, pid, interface))
+        return boot if pid == C.BOOTLOADER_PID else app
+
+    orig_open = _transport.open_by_interface
+    _transport.open_by_interface = fake_open
+    try:
+        pkg = _resources.FirmwarePackage(
+            app_image=bytes(C.APP_IMAGE_SIZE),
+            flash_image=bytes(0x9220),
+            metadata={"VID": "1532", "PID": "02B0",
+                      "BLVID": "1532", "BLPID": "110E"},
+        )
+        _updater.update(pkg, enter_boot=True, flash_fw=True)
+    finally:
+        _transport.open_by_interface = orig_open
+
+    pids = [p for _, p, _ in opened]
+    assert pids[0] == C.APP_PID          # enter-bootloader SET_MODE
+    assert C.BOOTLOADER_PID in pids       # app-image DFU
+    assert pids[-1] == C.APP_PID          # FlashFW phase
+    # bootloader got the DFU stream; app got SET_MODE then FlashFW commands
+    assert boot.writes
+    assert app.sent
+    assert frame.parse_frame(app.sent[0])[7] == C.OPCODE_ENTER_DEVICE_MODE
+    # after SET_MODE, the app device serves FlashFW: region info (0x80) then list
+    assert frame.parse_frame(app.sent[1])[7] == 0x80
+    assert frame.parse_frame(app.sent[2])[7] == 0x00
