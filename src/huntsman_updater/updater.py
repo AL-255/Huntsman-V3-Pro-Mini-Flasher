@@ -272,21 +272,28 @@ def update(package, enter_boot: bool = True, flash_fw: bool = True,
     overriding the target VID/PID/interface; when omitted the package metadata
     and defaults are used.
     """
+    from .settings import DeviceConfig
     if config is None:
-        vid = C.RAZER_VID
-        app_pid = package.pid
-        app_interface = C.APP_CONFIG_INTERFACE
-        bootloader_pid = package.bootloader_pid
-        bootloader_interface = C.BOOTLOADER_INTERFACE
-    else:
-        vid = config.vid
-        app_pid = config.app_pid
-        app_interface = config.app_interface
-        bootloader_pid = config.bootloader_pid
-        bootloader_interface = config.bootloader_interface
+        config = DeviceConfig(
+            vid=C.RAZER_VID,
+            app_pid=package.pid,
+            bootloader_pid=package.bootloader_pid,
+            app_interface=C.APP_CONFIG_INTERFACE,
+            bootloader_interface=C.BOOTLOADER_INTERFACE,
+        )
+    vid = config.vid
+    app_pid = config.app_pid
+    app_interface = config.app_interface
+    bootloader_pid = config.bootloader_pid
+    bootloader_interface = config.bootloader_interface
 
     if enter_boot:
-        enter_bootloader(vid, app_pid, app_interface)
+        # If the device is already in the bootloader (e.g. entered via Fn+USB
+        # or left over from an interrupted flash), skip the SET_MODE handshake
+        # that would otherwise fail for want of the application device.
+        from . import status as _status
+        if _status.detect_mode(config) != _status.MODE_BOOTLOADER:
+            enter_bootloader(vid, app_pid, app_interface)
         dev = wait_for_device(vid, bootloader_pid,
                               interface=bootloader_interface)
     else:

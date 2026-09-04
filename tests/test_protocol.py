@@ -185,7 +185,9 @@ def test_stream_firmware_sequence():
 def test_full_update_orchestration():
     """Exercise updater.update() end-to-end with fake transport devices."""
     import struct as _struct
+    from unittest import mock as _mock
     from huntsman_updater import resources as _resources
+    from huntsman_updater import status as _status
     from huntsman_updater import updater as _updater
     from huntsman_updater import transport as _transport
 
@@ -243,7 +245,11 @@ def test_full_update_orchestration():
             metadata={"VID": "1532", "PID": "02B0",
                       "BLVID": "1532", "BLPID": "110E"},
         )
-        _updater.update(pkg, enter_boot=True, flash_fw=True)
+        # Simulate an application-mode device so update() performs the
+        # SET_MODE handshake (detect_mode reads sysfs otherwise).
+        with _mock.patch.object(_status, "detect_mode",
+                                return_value=_status.MODE_APP):
+            _updater.update(pkg, enter_boot=True, flash_fw=True)
     finally:
         _transport.open_by_interface = orig_open
 
@@ -267,3 +273,32 @@ def test_full_update_orchestration():
     # after SET_MODE, the app device serves FlashFW: region info (0x80) then list
     assert frame.parse_frame(app.sent[1])[7] == 0x80
     assert frame.parse_frame(app.sent[2])[7] == 0x00
+
+
+def test_update_skips_enter_bootloader_when_already_in_bootloader():
+    """A device already in bootloader mode must not require the SET_MODE step."""
+    from unittest import mock as _mock
+    from huntsman_updater import resources as _resources
+    from huntsman_updater import status as _status
+    from huntsman_updater import updater as _updater
+
+    pkg = _resources.FirmwarePackage(
+        app_image=bytes(C.APP_IMAGE_SIZE), flash_image=b"",
+        metadata={"VID": "1532", "PID": "02B0",
+                  "BLVID": "1532", "BLPID": "110E"})
+
+    class _Dev:
+        def close(self):
+            pass
+
+    with _mock.patch.object(_status, "detect_mode",
+                            return_value=_status.MODE_BOOTLOADER), \
+         _mock.patch.object(_updater, "enter_bootloader") as enter_mock, \
+         _mock.patch.object(_updater, "wait_for_device",
+                            return_value=_Dev()) as wait_mock, \
+         _mock.patch.object(_updater, "flash_app_image") as flash_mock:
+        _updater.update(pkg, enter_boot=True, flash_fw=False)
+        enter_mock.assert_not_called()
+        flash_mock.assert_called_once()
+        # bootloader then app-mode waits both used wait_for_device
+        assert wait_mock.call_count == 2
