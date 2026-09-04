@@ -258,12 +258,23 @@ MCU using a distinct, region-based protocol rather than the DFU stream:
    `[0]=total`, `[1]=RegionID`, `[2]=type`, and `region_size` assembled from
    elements 4..7 as `el[4]<<24 | el[5]<<16 | el[6]<<8 | el[7]` (equals the
    FlashFW size, 37408 bytes).
-3. Verification uses the WinUSB control-transfer channel (`0x83`,
+3. The actual region programming uses a second command family on **channel
+   `0x10`** (the secondary DFU channel, **confirmed** from
+   `FWUpdaterDLL::DFUErase/DFUProgram/DFUVerify` disassembly):
+
+   | Opcode | Command | Payload |
+   | --- | --- | --- |
+   | `0x01` | erase | `address` (BE u32) + `size` (BE u32) |
+   | `0x02` | program | 1-byte length + `address` (BE u32) + data |
+   | `0x83` | verify | 1-byte length + `address` (BE u32) |
+   | `0x04` | abort | — |
+   | `0x05` | exit | — |
+4. Verification uses the WinUSB control-transfer channel (`0x83`,
    `callWinusbChecksumControl`) to read back a 16-bit checksum.
 
-The region-list and region-data command encoders are implemented in
-`src/huntsman_updater/region.py`; the full erase/program/verify sequencing is
-the remaining open item.
+The region-list/region-data and channel-`0x10` DFU command encoders are
+implemented in `src/huntsman_updater/region.py`; the exact erase/program/verify
+sequencing and device mode (application vs bootloader) remain open items.
 
 The firmware filename embeds a version (`%04x`) and a checksum (`%08x`), e.g.
 `..._v2.1.0_E888780F.enc`. The host parses the `0x30`-offset `"getv"` magic in

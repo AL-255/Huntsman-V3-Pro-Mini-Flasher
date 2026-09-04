@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from huntsman_updater import constants as C  # noqa: E402
-from huntsman_updater import dfu, firmware, frame  # noqa: E402
+from huntsman_updater import dfu, firmware, frame, region  # noqa: E402
 
 
 def test_frame_serial_number_report():
@@ -81,3 +81,38 @@ def test_response_parse():
     payload = b"\x31" + b"\x00" * 7 + b"\x36" + b"\x00" * 55
     echo, status = dfu.parse_response(payload)
     assert echo == ord("1") and status == ord("6")
+
+
+def test_region_list_payload():
+    import struct
+    p = region.build_region_list_payload(1, 1, 2, 0x50)
+    assert p == struct.pack("<HHHH", 1, 1, 2, 0x50)
+    r = region.build_region_list_report(p)
+    f = frame.parse_frame(r)
+    assert f[C.FRAME_CHANNEL] == region.CHANNEL_REGION
+    assert f[C.FRAME_OPCODE] == region.OPCODE_REGION_LIST
+    # response parsing: region_size from elements 4..7
+    payload = struct.pack("<8H", 1, 1, 2, 0, 0, 0, 0x92, 0x20)
+    resp = frame.to_report(frame.build_frame(
+        region.CHANNEL_REGION, region.OPCODE_REGION_LIST, payload,
+        payload_count=len(payload)))
+    info = region.parse_region_list_response(resp)
+    assert info["region_size"] == 0x9220
+
+
+def test_dfu_reports():
+    import struct
+    f = frame.parse_frame(region.build_dfu_erase_report(0x1234, 0x9220))
+    assert f[C.FRAME_CHANNEL] == region.CHANNEL_DFU
+    assert f[C.FRAME_OPCODE] == region.OPCODE_DFU_ERASE
+    assert f[8:12] == struct.pack(">I", 0x1234)
+    assert f[12:16] == struct.pack(">I", 0x9220)
+
+    f = frame.parse_frame(region.build_dfu_program_report(bytes(64), 0x1000))
+    assert f[C.FRAME_OPCODE] == region.OPCODE_DFU_PROGRAM
+    assert f[8] == 64
+    assert f[9:13] == struct.pack(">I", 0x1000)
+
+    f = frame.parse_frame(region.build_dfu_verify_report(64, 0x1000))
+    assert f[C.FRAME_OPCODE] == region.OPCODE_DFU_VERIFY
+    assert f[8] == 64

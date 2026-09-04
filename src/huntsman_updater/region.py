@@ -27,6 +27,16 @@ CHANNEL_REGION = 0x0A
 OPCODE_REGION_LIST = 0x00
 OPCODE_REGION_DATA = 0x02
 
+# Channel 0x10 is the secondary "flash FW" DFU channel (confirmed from
+# FWUpdaterDLL::DFUErase/DFUProgram/DFUVerify disassembly).  Its payload is
+# address/size or region+address+data in big-endian.
+CHANNEL_DFU = 0x10
+OPCODE_DFU_ERASE = 0x01
+OPCODE_DFU_PROGRAM = 0x02
+OPCODE_DFU_VERIFY = 0x83
+OPCODE_DFU_ABORT = 0x04
+OPCODE_DFU_EXIT = 0x05
+
 
 def build_region_list_payload(total: int, region_id: int, region_type: int,
                               packet_size: int) -> bytes:
@@ -67,3 +77,38 @@ def parse_region_list_response(report: bytes) -> dict:
     region_size = (elems[4] << 24) | (elems[5] << 16) | (elems[6] << 8) | elems[7]
     return {"total": total, "region_id": region_id, "type": region_type,
             "region_size": region_size}
+
+
+# --- channel 0x10 secondary-flash DFU --------------------------------------
+
+def build_dfu_report(opcode: int, payload: bytes) -> bytes:
+    """Build a channel-0x10 DFU feature report."""
+    f = frame.build_frame(CHANNEL_DFU, opcode, payload,
+                          payload_count=len(payload))
+    return frame.to_report(f)
+
+
+def build_dfu_erase_report(address: int, size: int) -> bytes:
+    """Erase ``size`` bytes at ``address`` (big-endian address + size)."""
+    payload = struct.pack(">II", address & 0xFFFFFFFF, size & 0xFFFFFFFF)
+    return build_dfu_report(OPCODE_DFU_ERASE, payload)
+
+
+def build_dfu_program_report(data: bytes, address: int) -> bytes:
+    """Program ``data`` at ``address`` (1-byte length + BE address + data)."""
+    payload = bytes([len(data) & 0xFF]) + struct.pack(">I", address) + data
+    return build_dfu_report(OPCODE_DFU_PROGRAM, payload)
+
+
+def build_dfu_verify_report(length: int, address: int) -> bytes:
+    """Verify ``length`` bytes at ``address`` (1-byte length + BE address)."""
+    payload = bytes([length & 0xFF]) + struct.pack(">I", address)
+    return build_dfu_report(OPCODE_DFU_VERIFY, payload)
+
+
+def build_dfu_abort_report() -> bytes:
+    return build_dfu_report(OPCODE_DFU_ABORT, b"")
+
+
+def build_dfu_exit_report() -> bytes:
+    return build_dfu_report(OPCODE_DFU_EXIT, b"")
