@@ -68,3 +68,15 @@ def flash_image_from_sectors(sectors: list[bytes], expected_size: int) -> bytes:
         raise ValueError(
             f"flash image size mismatch: {len(image)} != {expected_size}")
     return image
+
+
+def xor_fold(data: bytes) -> int:
+    """Fold ``data`` into a 32-bit XOR checksum (little-endian 32-bit words).
+
+    This matches the ``Ry_Online_Update_Dll`` whole-file integrity check in
+    ``FUN_10006650``: XOR each little-endian u32 word, ignoring a partial tail.
+    """
+    acc = 0
+    for off in range(0, len(data) & ~3, 4):
+        acc ^= int.from_bytes(data[off:off + 4], "little")
+    return acc & 0xFFFFFFFF

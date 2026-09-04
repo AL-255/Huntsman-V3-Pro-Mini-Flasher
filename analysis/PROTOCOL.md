@@ -241,11 +241,18 @@ structure is **confirmed** from `FUN_10006650`:
 - The file is `[32-byte header][payload]` where the payload is the application
   image (128 KiB). The 32-byte header is what the START packet carries at
   `[12..43]`; the payload is streamed as 512-byte DATA packets.
-- Integrity: the whole file is XOR-folded into a 32-bit checksum and compared
-  against the `%08x` value embedded in the filename (e.g. `E888780F` from
-  `..._v2.1.0_E888780F.enc`).
-- The secondary FlashFW image is a **separate** payload (`flashfw.bin` /
-  `FlashFWSector*`) flashed by a distinct route, not part of this stream.
+- Integrity: the whole file is XOR-folded into a 32-bit checksum (little-endian
+  u32 words) and compared against the `%08x` value embedded in the filename
+  (e.g. `E888780F` from `..._v2.1.0_E888780F.enc`).
+- **Verified:** the extracted `FlashFWSector` (37408 bytes) XOR-folds to
+  `0xe888780f` — exactly the `E888780F` suffix of `RYFWFileName`. The extracted
+  application image (131072 bytes) XOR-folds to `0x3d16aa5b` instead, so the
+  filename checksum identifies the *secondary* image.
+- The .NET worker writes the raw application image to `FW.bin` (from
+  `DevFWLine`) and the secondary image to `flashfw.bin`; the `.enc` envelope
+  and the `encryption_en=1` flag reference an encrypted form that is not
+  present in the extracted artifacts (no standard crypto is linked into the
+  updater binaries, so any transform is device-side or custom).
 
 ### 7.2 Secondary "flash FW" route (region protocol)
 
