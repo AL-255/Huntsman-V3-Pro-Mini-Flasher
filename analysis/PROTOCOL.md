@@ -59,9 +59,30 @@ reconstruction (`RZ0499_layout.h`):
 
 So in the HID report, `channel` = report byte 7 and `opcode` = report byte 8.
 
-### 3.1 Serial number query
+### 3.1 Channel-0 device command family
 
-- channel `0x00`, opcode `0x82` (`READ_CONFIGURATION`), payload_count `0x16`
+The channel-0 handler is the "device" command family. It exposes both write
+opcodes (configuration) and read opcodes (device-information polling), with
+the response payload sizes listed below (**confirmed** from the firmware's
+`device.c`):
+
+| Opcode | Name | Response |
+| --- | --- | --- |
+| `0x81` | QUERY_VERSION | 2 bytes (version0, version1) |
+| `0x82` | QUERY_IDENTIFIER | 22 bytes (serial number / config blob) |
+| `0x83` | QUERY_CAPABILITY | 2 bytes |
+| `0x84` | QUERY_MODE | 1 byte |
+| `0x86` | QUERY_PAIR | 2 bytes |
+| `0x87` | QUERY_EXTENDED_VERSION | 8 bytes (4 version + 4 extended) |
+| `0x9f` | QUERY_BUILD | 4 bytes |
+| `0xc0` | QUERY_PROFILE_TIMER | 2 bytes |
+
+Write opcodes: `0x02` WRITE_IDENTIFIER, `0x04` SET_MODE (enter device mode /
+bootloader), `0x06` WRITE_PAIR, `0x0b` RESTORE, `0x40` WRITE_PROFILE_TIMER.
+
+### 3.2 Serial number query
+
+- channel `0x00`, opcode `0x82` (`QUERY_IDENTIFIER`), payload_count `0x16`
   (22). Returns the 22-byte device payload (serial number / config blob).
 
 Observed on the host (`Ry_Online_Update_Dll` `FUN_10002d30`): it builds a
@@ -69,11 +90,11 @@ report with report[6]=0x16, report[7]=0x00, report[8]=0x82, folds a checksum
 over the report, sends `HidD_SetFeature(91)` and reads `HidD_GetFeature(91)`;
 the response echoes report[6..8] and carries status in report[1].
 
-### 3.2 Enter bootloader / device mode
+### 3.3 Enter bootloader / device mode
 
 - `FWUpdaterDLL.dll::EnterDeviceMode(handle, mode)` sends opcode `0x04`
-  (mode-select / enter-device-mode), observed from the host disassembly. The
-  .NET layer calls it via `EnterBLMode()` with mode `1`.
+  (`SET_MODE`, mode-select / enter-device-mode), observed from the host
+  disassembly. The .NET layer calls it via `EnterBLMode()` with mode `1`.
 
 The precise report byte positions for the `FWUpdaterDLL` frame differ from the
 90-byte config frame above (that DLL is a generic updater shared across Razer

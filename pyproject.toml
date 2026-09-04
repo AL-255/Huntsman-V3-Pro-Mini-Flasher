@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huntsman-updater"
+version = "0.1.0"
+description = "Independent firmware updater for the Razer Huntsman V3 Pro Mini"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[project.optional-dependencies]
+hid = ["hidapi"]
+
+[project.scripts]
+huntsman-updater = "huntsman_updater.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
