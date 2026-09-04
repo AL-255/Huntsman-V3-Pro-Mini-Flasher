@@ -44,10 +44,14 @@ def elevate() -> None:
     (so this function does not return in that case).  It raises
     :class:`ElevationError` when elevation fails or the user cancels.
 
-    The child is always re-launched as ``python -m huntsman_updater.gui`` so it
-    keeps the package import context, carrying any extra CLI arguments through.
+    The child is re-launched as ``python -m huntsman_updater.gui`` (to keep the
+    package import context), except inside a PyInstaller-frozen executable,
+    where it just re-runs the binary itself with any extra CLI arguments.
     """
-    argv = [sys.executable, "-m", _GUI_MODULE, *sys.argv[1:]]
+    if getattr(sys, "frozen", False):
+        argv = [sys.executable, *sys.argv[1:]]
+    else:
+        argv = [sys.executable, "-m", _GUI_MODULE, *sys.argv[1:]]
 
     if os.name == "nt":
         _elevate_windows(argv)

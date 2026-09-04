@@ -8,4 +8,8 @@ ghidra-work/
 __pycache__/
 *.pyc
 
+# PyInstaller output
+build/
+dist/
+
 .vscode/
