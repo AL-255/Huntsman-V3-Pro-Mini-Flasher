@@ -80,3 +80,20 @@ def xor_fold(data: bytes) -> int:
     for off in range(0, len(data) & ~3, 4):
         acc ^= int.from_bytes(data[off:off + 4], "little")
     return acc & 0xFFFFFFFF
+
+
+def validate_app_image(data: bytes) -> bytes:
+    """Return ``data`` if it is a well-sized 128 KiB application image."""
+    if len(data) != C.APP_IMAGE_SIZE:
+        raise ValueError(
+            f"application image must be {C.APP_IMAGE_SIZE} bytes, "
+            f"got {len(data)}")
+    return data
+
+
+def validate_flash_image(data: bytes) -> bytes:
+    """Return ``data`` if it is a well-sized secondary flash image."""
+    if len(data) != C.FLASH_IMAGE_SIZE:
+        raise ValueError(
+            f"flash image must be {C.FLASH_IMAGE_SIZE} bytes, got {len(data)}")
+    return data

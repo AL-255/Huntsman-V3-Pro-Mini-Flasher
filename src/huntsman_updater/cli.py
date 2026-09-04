@@ -28,6 +28,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("enter-bootloader", help="request bootloader entry")
 
+    sub.add_parser("gui", help="launch the graphical updater")
+
     return parser
 
 
@@ -79,6 +81,10 @@ def main(argv=None) -> int:
         updater.enter_bootloader()
         print("Bootloader entry requested.")
         return 0
+
+    if args.command == "gui":
+        from . import gui
+        return gui.main()
 
     return 1
 

@@ -15,6 +15,7 @@ hid = ["hidapi"]
 
 [project.scripts]
 huntsman-updater = "huntsman_updater.cli:main"
+huntsman-updater-gui = "huntsman_updater.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -124,6 +124,7 @@ DFU_RESP_DONE = ord("4")          # 0x34 final completion
 # Firmware geometry.
 APP_IMAGE_SIZE = 0x20000          # 128 KiB application image
 APP_RAM_LOAD_ADDRESS = 0x20000000  # RAM-resident execution address
+FLASH_IMAGE_SIZE = 37408          # secondary "7203" Optical-ASIC image
 DATA_CHUNK_SIZE = 0x200           # 512-byte DFU data chunks
 START_HEADER_LEN = 0x20           # 32-byte header carried in the START packet
 
