@@ -122,25 +122,36 @@ def test_dfu_reports():
 
 
 class _FakeBootloader:
-    """Emulates the bootloader's 65-byte report ACK behaviour."""
+    """Emulates the bootloader's 65-byte report ACK behaviour.
+
+    It reassembles the incoming 64-byte chunks into DFU packets and returns
+    ``ACK`` for every chunk except the one that completes a packet, which gets
+    ``DONE`` — matching ``FUN_100064d0``'s host-side expectations.
+    """
 
     def __init__(self):
         self.writes = []
+        self._buf = b""
+        self._total = None
 
     def write(self, data):
         self.writes.append(bytes(data))
+        payload = bytes(data[1:])           # drop the report id
+        if self._total is None:             # first chunk: parse the header
+            length = int.from_bytes(payload[4:6], "little")
+            self._total = length + 8
+        self._buf += payload
         return len(data)
 
     def read(self, length, timeout_ms=0):
-        # echo the command and ACK each chunk, DONE on the final chunk of a
-        # packet (the caller re-reads per 64-byte chunk).
-        last = self.writes[-1]
-        cmd = last[1] if len(last) > 1 else 0
-        # last chunk of a packet is the one that does not fill 64 payload bytes
-        # after accounting for the report id; approximate: always DONE.
+        cmd = self._buf[0]
+        done = len(self._buf) >= self._total
         payload = bytearray(64)
         payload[0] = cmd
-        payload[8] = C.DFU_RESP_ACK
+        payload[8] = C.DFU_RESP_DONE if done else C.DFU_RESP_ACK
+        if done:
+            self._buf = b""
+            self._total = None
         return b"\x00" + bytes(payload)
 
     def close(self):
