@@ -31,11 +31,11 @@ def test_frame_enter_bootloader():
 
 
 def test_start_packet():
-    pkt = dfu.build_start_packet(0, 0x20000000, b"\x00" * 32, b"")
+    pkt = dfu.build_start_packet(0, 0x20000, b"\x00" * 32, b"")
     assert pkt[0] == C.DFU_CMD_START
     assert pkt[1] == 0
-    assert int.from_bytes(pkt[4:6], "little") == 36   # 4 addr + 32 header
-    assert pkt[8:12] == (0x20000000).to_bytes(4, "little")
+    assert int.from_bytes(pkt[4:6], "little") == 36   # 4 size + 32 header
+    assert pkt[8:12] == (0x20000).to_bytes(4, "little")
     assert len(pkt) == 8 + 36
 
 

@@ -30,16 +30,17 @@ def _packet(command: int, counter: int, value: int, payload: bytes,
     return header + payload
 
 
-def build_start_packet(counter: int, app_address: int, header: bytes,
-                       flash_fw_preface: bytes) -> bytes:
+def build_start_packet(counter: int, total_size: int, header: bytes,
+                       preface: bytes = b"") -> bytes:
     """Build a START packet.
 
-    ``header`` is the 32-byte firmware-file header; ``flash_fw_preface`` is the
-    optional secondary (FlashFW) image preface appended after the header.
+    ``total_size`` is the payload byte count (the application image size) and
+    ``header`` is the 32-byte firmware-file header.  ``preface`` is an optional
+    fixed blob appended after the header (present in the original stream).
     """
     if len(header) != C.START_HEADER_LEN:
         raise ValueError("START header must be 32 bytes")
-    payload = struct.pack("<I", app_address) + header + flash_fw_preface
+    payload = struct.pack("<I", total_size & 0xFFFFFFFF) + header + preface
     return _packet(C.DFU_CMD_START, counter, counter, payload,
                    flag=1, block_count=0x80)
 

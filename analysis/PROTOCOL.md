@@ -147,7 +147,7 @@ by `ReadFile`.
 | `0x32` (`'2'`) | DATA | one 512-byte firmware chunk |
 | `0x33` (`'3'`) | END | accumulated checksum + timestamp |
 
-### 4.2 Packet header (observed)
+### 4.2 Packet header (confirmed from `FUN_10006650` disassembly)
 
 8-byte header, little-endian fields:
 
@@ -155,13 +155,20 @@ by `ReadFile`.
 | --- | --- | --- |
 | 0 | command | `'1'`, `'2'`, `'3'` |
 | 1 | counter | packet sequence byte |
-| 2..3 | value | `app_size >> 2` (START/END) |
-| 4..5 | length | data byte count (host reads `*(u16*)(pkt+4)`; total = length + 8) |
-| 6..7 | flags | block count / mode |
+| 2..3 | value | START: counter (16-bit); END: `app_size >> 2` |
+| 4..5 | length | payload byte count (total = length + 8) |
+| 6 | flag | `1` on START |
+| 7 | block_count | block count on START |
 
-START additionally carries a 32-byte file-header field and the FlashFW preface;
-DATA carries up to 512 bytes; END carries a 32-bit checksum and a
-date/time stamp.
+Payloads:
+
+- **START**: `[8..11]` = total payload size (uint32 LE, = application image
+  size); `[12..43]` = 32-byte firmware-file header; `[44..]` = fixed preface
+  (420 or 448 bytes in the original stream).
+- **DATA**: `[8..519]` = up to 512 firmware bytes.
+- **END** (length 12): `[8..11]` = accumulated XOR checksum (uint32 LE);
+  `[12]`=day, `[13]`=month, `[14..15]`=year, `[16]`=second, `[17]`=minute,
+  `[18..19]`=hour.
 
 ### 4.3 Response / ACK
 
@@ -213,6 +220,20 @@ app_start=0x20000000
 | `DevFWLine*` (Intel HEX) | 131072 B | primary application image, loads at `0x20000000` |
 | `FlashFWSector*` (byte arrays) | 37408 B | secondary "flash FW" image (encrypted when `encryption_en=1`) |
 
+### 7.1 Firmware file envelope (`upgrade_file`)
+
+The `Ry_Online_Update_Dll` engine streams a single firmware file. Its
+structure is **confirmed** from `FUN_10006650`:
+
+- The file is `[32-byte header][payload]` where the payload is the application
+  image (128 KiB). The 32-byte header is what the START packet carries at
+  `[12..43]`; the payload is streamed as 512-byte DATA packets.
+- Integrity: the whole file is XOR-folded into a 32-bit checksum and compared
+  against the `%08x` value embedded in the filename (e.g. `E888780F` from
+  `..._v2.1.0_E888780F.enc`).
+- The secondary FlashFW image is a **separate** payload (`flashfw.bin` /
+  `FlashFWSector*`) flashed by a distinct route, not part of this stream.
+
 The firmware filename embeds a version (`%04x`) and a checksum (`%08x`), e.g.
 `..._v2.1.0_E888780F.enc`. The host parses the `0x30`-offset `"getv"` magic in
 the firmware file header to validate it before streaming.
@@ -233,10 +254,10 @@ Progress/state callbacks use the `UPDATE_STATE` values
 
 ## 9. Open items
 
-- Exact byte-level layout of the DFU START/DATA/END packet header (offsets
-  above are from host disassembly and may need one field reordered).
-- The firmware `.enc` file envelope (header/version/checksum fields) and the
-  FlashFW (`FlashFWSector`) encryption scheme.
+- The exact 32-byte firmware-file header content and the 420/448-byte START
+  packet preface.
+- The FlashFW (`FlashFWSector`) flashing route (a separate `flashfw.bin`
+  payload) and its encryption scheme.
 - The bootloader's flash region/address map (where the app image is written).
 
 ## 10. Scope

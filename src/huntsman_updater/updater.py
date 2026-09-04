@@ -92,11 +92,16 @@ def _send_packet(dev, packet: bytes) -> None:
                 f"chunk {i} not acknowledged (status {status:#x})")
 
 
-def stream_firmware(dev, app_image: bytes, app_address: int,
-                    flash_image: bytes = b"",
+def stream_firmware(dev, app_image: bytes,
                     header: bytes | None = None,
+                    preface: bytes = b"",
                     progress=None) -> None:
-    """Stream the application image (and flash preface) to the bootloader."""
+    """Stream the application image to the bootloader as START/DATA/END.
+
+    The START packet carries the payload size (``len(app_image)``) and the
+    32-byte firmware-file header.  The secondary FlashFW image is a separate
+    concern and is *not* part of this stream.
+    """
     if len(app_image) != C.APP_IMAGE_SIZE:
         raise ValueError(
             f"application image must be {C.APP_IMAGE_SIZE} bytes, got "
@@ -108,7 +113,7 @@ def stream_firmware(dev, app_image: bytes, app_address: int,
         raise ValueError("START header must be 32 bytes")
 
     counter = 0
-    start = dfu.build_start_packet(counter, app_address, header, flash_image)
+    start = dfu.build_start_packet(counter, len(app_image), header, preface)
     _send_packet(dev, start)
     counter += 1
 
@@ -124,9 +129,13 @@ def stream_firmware(dev, app_image: bytes, app_address: int,
     _send_packet(dev, dfu.build_end_packet(counter, checksum, len(app_image)))
 
 
-def update(package, app_address: int = C.APP_RAM_LOAD_ADDRESS,
-           enter_boot: bool = True, progress=None) -> None:
-    """Run the full update: enter bootloader, stream firmware, verify."""
+def update(package, enter_boot: bool = True, progress=None) -> None:
+    """Run the full update: enter bootloader, stream the app image, verify.
+
+    The secondary FlashFW image (``package.flash_image``) is extracted and
+    validated by :mod:`resources` but its flashing route is not yet
+    re-implemented (see ``analysis/PROTOCOL.md`` §9).
+    """
     if enter_boot:
         enter_bootloader(C.RAZER_VID, package.pid, C.APP_CONFIG_INTERFACE)
         dev = wait_for_bootloader(C.RAZER_VID, package.bootloader_pid)
@@ -134,7 +143,6 @@ def update(package, app_address: int = C.APP_RAM_LOAD_ADDRESS,
         dev = transport.open_by_interface(C.RAZER_VID, package.bootloader_pid, None)
 
     try:
-        stream_firmware(dev, package.app_image, app_address,
-                        flash_image=package.flash_image, progress=progress)
+        stream_firmware(dev, package.app_image, progress=progress)
     finally:
         dev.close()

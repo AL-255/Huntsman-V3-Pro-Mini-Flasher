@@ -95,7 +95,7 @@ DFU_HDR_BLOCK_COUNT = 7           # block count on START
 DFU_HDR_BYTES = 8
 
 # START packet payload layout.
-DFU_START_ADDR = 8                # uint32 LE app start address
+DFU_START_SIZE = 8                # uint32 LE total payload size (image bytes)
 DFU_START_HEADER = 12             # 32-byte firmware file header
 
 # END packet payload layout (12-byte payload).

@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import constants as C
 from . import updater
 from .resources import load_firmware_package
 
@@ -20,8 +19,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     flash = sub.add_parser("flash", help="flash firmware from a resources file")
     flash.add_argument("resources", help="path to DeviceUpdater.resources")
-    flash.add_argument("--app-address", default=None,
-                       help="application flash/load address (default 0x20000000)")
     flash.add_argument("--no-enter-boot", action="store_true",
                        help="assume the device is already in the bootloader "
                             "(e.g. plugged in while holding Fn)")
@@ -51,8 +48,6 @@ def main(argv=None) -> int:
 
     if args.command == "flash":
         pkg = load_firmware_package(args.resources)
-        app_address = (int(args.app_address, 0) if args.app_address
-                       else C.APP_RAM_LOAD_ADDRESS)
 
         def progress(done, total):
             pct = done * 100 // total
@@ -60,11 +55,9 @@ def main(argv=None) -> int:
                   flush=True)
 
         print(f"Flashing {pkg.metadata.get('ProductName')} "
-              f"({len(pkg.app_image)} bytes app, "
-              f"{len(pkg.flash_image)} bytes flash) at "
-              f"{app_address:#010x}")
-        updater.update(pkg, app_address=app_address,
-                       enter_boot=not args.no_enter_boot, progress=progress)
+              f"({len(pkg.app_image)} bytes app image)")
+        updater.update(pkg, enter_boot=not args.no_enter_boot,
+                       progress=progress)
         print("\nFlash complete.")
         return 0
 
