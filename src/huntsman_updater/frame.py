@@ -68,11 +68,14 @@ def read_serial_number_report() -> bytes:
 def enter_bootloader_report() -> bytes:
     """Build the 91-byte feature report that requests bootloader entry.
 
-    Channel 0x00, opcode 0x04 (mode-select / enter-device-mode).  The original
-    ``EnterDeviceMode(handle, 1)`` passes mode 1.
+    Channel 0x00, opcode 0x04 (SET_MODE), payload_count 2, payload ``[mode=1,
+    0]`` — the exact frame produced by ``FWUpdaterDLL::EnterDeviceMode(handle,
+    1)`` (confirmed from its disassembly).  On receipt the firmware raises the
+    mode-one reset request, writes the ``0xaaaaaaaa`` persistent reset cookie,
+    and performs a system reset into the bootloader.
     """
     frame = build_frame(C.CHANNEL_DEVICE, C.OPCODE_ENTER_DEVICE_MODE,
-                        payload=b"\x01", payload_count=1)
+                        payload=b"\x01\x00", payload_count=2)
     return to_report(frame)
 
 

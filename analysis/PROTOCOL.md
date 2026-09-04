@@ -20,6 +20,21 @@ further confirmation).
 These come from the `.resources` metadata (`VID`, `PID`, `BLVID`, `BLPID`,
 `BCDPID_BL`) and from `update_config.ini` (`bootdev_info=vid_1532&pid_02B0&mi_05`).
 
+### 1.1 Entering bootloader mode
+
+There are two ways to put the keyboard into its bootloader (`1532:110E`):
+
+1. **Host command** (what the updater uses): send the channel-0 `SET_MODE`
+   opcode `0x04` with mode `1` (see §3.3). The firmware raises its mode-one
+   reset request, writes the persistent reset cookie `0xaaaaaaaa` and performs
+   a system reset into the bootloader.
+
+2. **Manual** (hardware-level, e.g. for a bricked or unresponsive device):
+   **connect the USB cable while holding the `Fn` key down.** This forces the
+   keyboard to power on directly into the bootloader, where it enumerates as
+   `1532:110E` and is ready to accept the DFU stream without any application
+   mode handshake.
+
 ## 2. Two HID transports
 
 The update uses two distinct HID report protocols:
@@ -93,12 +108,29 @@ the response echoes report[6..8] and carries status in report[1].
 ### 3.3 Enter bootloader / device mode
 
 - `FWUpdaterDLL.dll::EnterDeviceMode(handle, mode)` sends opcode `0x04`
-  (`SET_MODE`, mode-select / enter-device-mode), observed from the host
-  disassembly. The .NET layer calls it via `EnterBLMode()` with mode `1`.
+  (`SET_MODE`), **confirmed** from its disassembly. The .NET layer calls it via
+  `EnterBLMode()` with mode `1`.
 
-The precise report byte positions for the `FWUpdaterDLL` frame differ from the
-90-byte config frame above (that DLL is a generic updater shared across Razer
-devices); the exact mapping to the 90-byte frame is still being reconciled.
+The exact 91-byte feature report (**confirmed** byte-for-byte from
+`EnterDeviceMode`'s disassembly, mapped onto the 90-byte frame as
+`frame[i] == report[i+1]`):
+
+| Report offset | Frame field | Value |
+| --- | --- | --- |
+| 0 | report id | `0` (or `7`/`8` for other Razer device families) |
+| 1 | status | `0` |
+| 2..5 | header | `0` |
+| 6 | payload_count | `2` |
+| 7 | channel | `0x00` |
+| 8 | opcode | `0x04` (SET_MODE) |
+| 9 | payload[0] | mode = `1` |
+| 10 | payload[1] | `0` |
+| 89 | checksum | `0` (the generic `FWUpdaterDLL` path does not compute it; the firmware does not validate it) |
+
+On receipt, the firmware sets `MODE_ONE_RESET_REQUEST`, writes the persistent
+reset cookie `0xaaaaaaaa` to `0x2002FFFC`, and performs `NVIC_SystemReset`,
+after which the ROM/on-flash bootloader takes over and re-enumerates as
+`1532:110E`.
 
 ## 4. Bootloader-mode DFU (65-byte input/output reports)
 
@@ -201,8 +233,17 @@ Progress/state callbacks use the `UPDATE_STATE` values
 
 ## 9. Open items
 
-- Exact report-byte mapping of `FWUpdaterDLL` frame vs the 90-byte config frame.
 - Exact byte-level layout of the DFU START/DATA/END packet header (offsets
   above are from host disassembly and may need one field reordered).
-- FlashFW (`FlashFWSector`) encryption scheme.
+- The firmware `.enc` file envelope (header/version/checksum fields) and the
+  FlashFW (`FlashFWSector`) encryption scheme.
 - The bootloader's flash region/address map (where the app image is written).
+
+## 10. Scope
+
+This protocol document and the accompanying `src/huntsman_updater/`
+implementation target **only the Razer Huntsman V3 Pro Mini** (RZ03-0499,
+`1532:02B0`). The other VID/PID pairs and device families that appear in the
+shared `FWUpdaterDLL.dll` / `CustomerFWU2Point5.exe` binaries (PS4/PS5
+controllers, wireless mice, other Blade laptops, etc.) are explicitly out of
+scope.

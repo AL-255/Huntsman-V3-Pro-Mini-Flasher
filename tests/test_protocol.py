@@ -25,7 +25,9 @@ def test_frame_serial_number_report():
 def test_frame_enter_bootloader():
     report = frame.enter_bootloader_report()
     assert report[1 + C.FRAME_OPCODE] == C.OPCODE_ENTER_DEVICE_MODE
+    assert report[1 + C.FRAME_PAYLOAD_COUNT] == 2
     assert report[1 + C.FRAME_PAYLOAD] == 0x01
+    assert report[1 + C.FRAME_PAYLOAD + 1] == 0x00
 
 
 def test_start_packet():

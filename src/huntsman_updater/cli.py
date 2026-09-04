@@ -23,7 +23,8 @@ def _build_parser() -> argparse.ArgumentParser:
     flash.add_argument("--app-address", default=None,
                        help="application flash/load address (default 0x20000000)")
     flash.add_argument("--no-enter-boot", action="store_true",
-                       help="assume the device is already in the bootloader")
+                       help="assume the device is already in the bootloader "
+                            "(e.g. plugged in while holding Fn)")
 
     info_dev = sub.add_parser("device-info", help="poll device information")
     info_dev.add_argument("--serial", action="store_true", help="serial number only")

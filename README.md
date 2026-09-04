@@ -3,6 +3,11 @@
 A from-scratch reimplementation of the firmware update/flashing capability of
 the Razer Huntsman V3 Pro Mini (RZ03-0499) firmware updater.
 
+> **Scope:** this project targets **only the Razer Huntsman V3 Pro Mini**
+> (`1532:02B0`). The shared Razer updater DLLs also cover many other devices
+> (PS4/PS5 controllers, wireless mice, Blade laptops, etc.); none of those are
+> supported here.
+
 The original updater (`HuntsmanV3ProMini_02B0_FirmwareUpdater_v2.01.00_r1.exe`)
 is a .NET shell that drives two native DLLs (`Ry_Online_Update_Dll`,
 `FWUpdaterDLL`) over HID and WinUSB. This project re-derives that protocol and
