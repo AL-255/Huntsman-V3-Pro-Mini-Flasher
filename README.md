@@ -88,7 +88,10 @@ huntsman-updater-gui
 - flashes the application image with a progress bar and log, plus
   **Enter bootloader** / **Exit bootloader** recovery buttons.  The optional
   secondary (FlashFW) image is hidden behind a **"Flash secondary firmware"**
-  checkbox that reveals a second file picker when checked.
+  checkbox that reveals a second file picker when checked;
+- an **Advanced…** settings dialog lets you override the automatic device
+  selection — enter a custom VID, application/bootloader PID, and interface
+  numbers when the device enumerates with non-default IDs.
 
 The window is compact (minimum 420×340) so it fits small screens.
 

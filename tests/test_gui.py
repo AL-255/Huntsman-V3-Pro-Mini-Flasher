@@ -13,6 +13,7 @@ from huntsman_updater import constants as C  # noqa: E402
 from huntsman_updater import firmware, status  # noqa: E402
 from huntsman_updater import gui  # noqa: E402
 from huntsman_updater import elevate  # noqa: E402
+from huntsman_updater import settings  # noqa: E402
 
 
 class _FakeFile:
@@ -103,6 +104,48 @@ def test_detect_mode():
     patchers = _patch_sysfs({"1-1": ("046d", "c548")})
     with patchers[0], patchers[1], patchers[2]:
         assert status.detect_mode() == status.MODE_NONE
+
+
+def test_detect_mode_custom_pids():
+    cfg = settings.DeviceConfig(vid=0x1234, app_pid=0xABCD,
+                                bootloader_pid=0xEF01)
+    patchers = _patch_sysfs({"1-1": ("1234", "ef01")})
+    with patchers[0], patchers[1], patchers[2]:
+        assert status.detect_mode(cfg) == status.MODE_BOOTLOADER
+
+    patchers = _patch_sysfs({"1-1": ("1234", "abcd")})
+    with patchers[0], patchers[1], patchers[2]:
+        assert status.detect_mode(cfg) == status.MODE_APP
+
+
+def test_device_config_defaults():
+    cfg = settings.DeviceConfig.defaults()
+    assert cfg.vid == 0x1532
+    assert cfg.app_pid == 0x02B0
+    assert cfg.bootloader_pid == 0x110E
+    assert cfg.app_interface == 3
+    assert cfg.bootloader_interface == 0
+
+
+def test_device_config_from_strings():
+    cfg = settings.DeviceConfig.from_strings("1532", "02B0", "110E", "3", "0")
+    assert cfg.vid == 0x1532
+    assert cfg.app_pid == 0x02B0
+    assert cfg.bootloader_pid == 0x110E
+    assert cfg.app_interface == 3
+    assert cfg.bootloader_interface == 0
+
+    try:
+        settings.DeviceConfig.from_strings("zz", "02B0", "110E", "3", "0")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for non-hex VID")
+
+
+def test_device_status_custom_mode_label():
+    s = status.DeviceStatus(mode=status.MODE_APP, app_pid=0xABCD)
+    assert "ABCD" in s.mode_label
 
 
 def test_is_elevated_returns_bool():

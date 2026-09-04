@@ -260,21 +260,38 @@ def flash_app_image(dev, app_image: bytes, progress=None) -> None:
 
 
 def update(package, enter_boot: bool = True, flash_fw: bool = True,
-           progress=None) -> None:
+           progress=None, config=None) -> None:
     """Flash the application image over the bootloader channel-0x10 DFU.
 
     Flow: enter the bootloader, open its single 90-byte feature-report
     interface, erase/program/exit, then wait for the device to re-enumerate in
     application mode.  ``flash_fw`` currently toggles the secondary FlashFW
     image path, whose sequencing is still best-effort.
+
+    ``config`` is an optional :class:`~huntsman_updater.settings.DeviceConfig`
+    overriding the target VID/PID/interface; when omitted the package metadata
+    and defaults are used.
     """
-    if enter_boot:
-        enter_bootloader(C.RAZER_VID, package.pid, C.APP_CONFIG_INTERFACE)
-        dev = wait_for_device(C.RAZER_VID, package.bootloader_pid,
-                              interface=C.BOOTLOADER_INTERFACE)
+    if config is None:
+        vid = C.RAZER_VID
+        app_pid = package.pid
+        app_interface = C.APP_CONFIG_INTERFACE
+        bootloader_pid = package.bootloader_pid
+        bootloader_interface = C.BOOTLOADER_INTERFACE
     else:
-        dev = transport.open_by_interface(
-            C.RAZER_VID, package.bootloader_pid, C.BOOTLOADER_INTERFACE)
+        vid = config.vid
+        app_pid = config.app_pid
+        app_interface = config.app_interface
+        bootloader_pid = config.bootloader_pid
+        bootloader_interface = config.bootloader_interface
+
+    if enter_boot:
+        enter_bootloader(vid, app_pid, app_interface)
+        dev = wait_for_device(vid, bootloader_pid,
+                              interface=bootloader_interface)
+    else:
+        dev = transport.open_by_interface(vid, bootloader_pid,
+                                          bootloader_interface)
 
     try:
         flash_app_image(dev, package.app_image, progress=progress)
@@ -282,12 +299,10 @@ def update(package, enter_boot: bool = True, flash_fw: bool = True,
         dev.close()
 
     # DFUExit reboots the device back into application mode.
-    wait_for_device(C.RAZER_VID, package.pid,
-                    interface=C.APP_CONFIG_INTERFACE).close()
+    wait_for_device(vid, app_pid, interface=app_interface).close()
 
     if flash_fw and package.flash_image:
-        dev = wait_for_device(C.RAZER_VID, package.pid,
-                              interface=C.APP_CONFIG_INTERFACE)
+        dev = wait_for_device(vid, app_pid, interface=app_interface)
         try:
             flash_secondary(dev, package.flash_image, progress=progress)
         finally:

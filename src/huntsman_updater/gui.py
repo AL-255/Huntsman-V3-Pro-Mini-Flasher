@@ -18,6 +18,7 @@ from . import status, transport, updater
 from .firmware import (parse_intel_hex, validate_app_image,
                        validate_flash_image)
 from .resources import FirmwarePackage, load_firmware_package
+from .settings import DeviceConfig
 
 POLL_INTERVAL_MS = 2000
 
@@ -76,6 +77,8 @@ class HuntsmanUpdaterApp:
         self._work_q: queue.Queue = queue.Queue()
         self._flashing = threading.Event()
         self._stop = threading.Event()
+        self._device_config = DeviceConfig.defaults()
+        self._custom_device = False
 
         self._build_widgets()
         self._start_poller()
@@ -111,7 +114,9 @@ class HuntsmanUpdaterApp:
             self._status_labels[key] = lbl
 
         ttk.Button(status_frame, text="Refresh", command=self._refresh_now
-                   ).grid(row=3, column=0, columnspan=4, sticky="w", **pad)
+                   ).grid(row=3, column=0, sticky="w", **pad)
+        ttk.Button(status_frame, text="Advanced…", command=self._open_advanced
+                   ).grid(row=3, column=1, sticky="w", **pad)
 
         files_frame = ttk.LabelFrame(self.root, text="Firmware file")
         files_frame.pack(fill="x", padx=6, pady=4)
@@ -198,6 +203,81 @@ class HuntsmanUpdaterApp:
         else:
             self._secondary_row.grid_remove()
 
+    # -- advanced device selection ------------------------------------------
+    def _open_advanced(self) -> None:
+        """Open the advanced-settings dialog for a custom VID/PID/interface."""
+        win = tk.Toplevel(self.root)
+        win.title("Advanced settings")
+        win.transient(self.root)
+        win.resizable(False, False)
+        pad = {"padx": 6, "pady": 3}
+
+        custom = tk.BooleanVar(value=self._custom_device)
+        cfg = self._device_config
+
+        fields: dict[str, tuple[tk.StringVar, ttk.Entry]] = {}
+
+        def _set_fields() -> None:
+            state = "normal" if custom.get() else "disabled"
+            for _, entry in fields.values():
+                entry.configure(state=state)
+
+        ttk.Checkbutton(
+            win, text="Use custom device VID/PID/interface",
+            variable=custom, command=_set_fields).grid(
+                row=0, column=0, columnspan=2, sticky="w", **pad)
+
+        spec = [
+            ("vid", "VID (hex)", f"{cfg.vid:04X}"),
+            ("app_pid", "Application PID (hex)", f"{cfg.app_pid:04X}"),
+            ("bootloader_pid", "Bootloader PID (hex)",
+             f"{cfg.bootloader_pid:04X}"),
+            ("app_interface", "Application interface", str(cfg.app_interface)),
+            ("bootloader_interface", "Bootloader interface",
+             str(cfg.bootloader_interface)),
+        ]
+        for i, (key, label, initial) in enumerate(spec, start=1):
+            ttk.Label(win, text=label).grid(row=i, column=0, sticky="w", **pad)
+            var = tk.StringVar(value=initial)
+            entry = ttk.Entry(win, textvariable=var, width=14)
+            entry.grid(row=i, column=1, sticky="w", **pad)
+            fields[key] = (var, entry)
+        _set_fields()
+
+        def _ok() -> None:
+            if not custom.get():
+                self._custom_device = False
+                self._device_config = DeviceConfig.defaults()
+                self._log_line("Device selection: automatic (defaults).")
+                win.destroy()
+                return
+            try:
+                self._device_config = DeviceConfig.from_strings(
+                    fields["vid"][0].get(),
+                    fields["app_pid"][0].get(),
+                    fields["bootloader_pid"][0].get(),
+                    fields["app_interface"][0].get(),
+                    fields["bootloader_interface"][0].get(),
+                )
+            except ValueError as exc:
+                messagebox.showerror("Invalid device settings", str(exc),
+                                     parent=win)
+                return
+            self._custom_device = True
+            self._log_line(
+                f"Device selection: custom "
+                f"{self._device_config.vid:04X}:"
+                f"{self._device_config.app_pid:04X} / bootloader "
+                f"{self._device_config.bootloader_pid:04X}.")
+            win.destroy()
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=len(spec) + 1, column=0, columnspan=2,
+                     sticky="e", **pad)
+        ttk.Button(buttons, text="OK", command=_ok).pack(side="left", padx=4)
+        ttk.Button(buttons, text="Cancel", command=win.destroy).pack(
+            side="left", padx=4)
+
     # -- status polling ------------------------------------------------------
     def _start_poller(self) -> None:
         threading.Thread(target=self._poll_loop, daemon=True).start()
@@ -206,7 +286,7 @@ class HuntsmanUpdaterApp:
         while not self._stop.is_set():
             if not self._flashing.is_set():
                 try:
-                    snap = status.read_device_status()
+                    snap = status.read_device_status(self._device_config)
                 except Exception as exc:  # noqa: BLE001
                     snap = exc
             else:
@@ -247,11 +327,15 @@ class HuntsmanUpdaterApp:
         def work():
             try:
                 if action == "enter-bootloader":
-                    updater.enter_bootloader()
+                    updater.enter_bootloader(
+                        self._device_config.vid, self._device_config.app_pid,
+                        self._device_config.app_interface)
                     self._work_q.put(("log", "Bootloader entry requested."))
                 elif action == "exit-bootloader":
                     dev = transport.open_by_interface(
-                        C.RAZER_VID, C.BOOTLOADER_PID, C.BOOTLOADER_INTERFACE)
+                        self._device_config.vid,
+                        self._device_config.bootloader_pid,
+                        self._device_config.bootloader_interface)
                     try:
                         from . import region
                         dev.send_feature_report(region.build_dfu_exit_report())
@@ -314,7 +398,7 @@ class HuntsmanUpdaterApp:
                 self._work_q.put(("progress", pct))
 
             updater.update(pkg, enter_boot=True, flash_fw=do_secondary,
-                           progress=progress)
+                           progress=progress, config=self._device_config)
             self._work_q.put(("log", "Flash complete."))
             self._work_q.put(("done", True))
         except Exception as exc:  # noqa: BLE001

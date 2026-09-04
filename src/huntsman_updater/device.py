@@ -3,6 +3,9 @@
 The keyboard exposes a channel-0 "device" command family over 91-byte HID
 feature reports.  The read opcodes poll device information (version, serial
 number, capability, mode, build, ...); see ``constants.DEVICE_QUERY_*``.
+
+Every query accepts an optional VID/PID/interface override so a non-default
+device (see ``settings.DeviceConfig``) can be polled.
 """
 from __future__ import annotations
 
@@ -12,7 +15,9 @@ from . import constants as C
 from . import frame, transport
 
 
-def _query(opcode: int, payload: bytes = b"", retries: int = 8) -> bytes:
+def _query(opcode: int, payload: bytes = b"", retries: int = 8,
+           vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+           interface: int = C.APP_CONFIG_INTERFACE) -> bytes:
     """Send a channel-0 query and return the response payload bytes.
 
     The firmware processes command frames asynchronously, so the response is
@@ -20,8 +25,7 @@ def _query(opcode: int, payload: bytes = b"", retries: int = 8) -> bytes:
     reporting ``STATUS_BUSY``.
     """
     import time
-    dev = transport.open_by_interface(C.RAZER_VID, C.APP_PID,
-                                      C.APP_CONFIG_INTERFACE)
+    dev = transport.open_by_interface(vid, pid, interface)
     try:
         report = frame.to_report(
             frame.build_frame(C.CHANNEL_DEVICE, opcode, payload))
@@ -50,35 +54,46 @@ def _ascii(data: bytes) -> str:
     return data.split(b"\x00", 1)[0].decode("ascii", errors="replace")
 
 
-def query_version() -> bytes:
+def query_version(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+                  interface: int = C.APP_CONFIG_INTERFACE) -> bytes:
     """2-byte version (``version0``, ``version1``)."""
-    return _query(C.OPCODE_QUERY_VERSION)
+    return _query(C.OPCODE_QUERY_VERSION, vid=vid, pid=pid, interface=interface)
 
 
-def query_serial() -> str:
+def query_serial(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+                 interface: int = C.APP_CONFIG_INTERFACE) -> str:
     """22-byte identifier / serial number, decoded as ASCII."""
-    return _ascii(_query(C.OPCODE_READ_CONFIGURATION))
+    return _ascii(_query(C.OPCODE_READ_CONFIGURATION,
+                         vid=vid, pid=pid, interface=interface))
 
 
-def query_extended_version() -> bytes:
+def query_extended_version(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+                           interface: int = C.APP_CONFIG_INTERFACE) -> bytes:
     """8-byte extended firmware version (4 version bytes + 4 extended bytes)."""
-    return _query(C.OPCODE_QUERY_EXTENDED_VERSION)
+    return _query(C.OPCODE_QUERY_EXTENDED_VERSION,
+                  vid=vid, pid=pid, interface=interface)
 
 
-def query_capability() -> bytes:
-    return _query(C.OPCODE_QUERY_CAPABILITY)
+def query_capability(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+                     interface: int = C.APP_CONFIG_INTERFACE) -> bytes:
+    return _query(C.OPCODE_QUERY_CAPABILITY, vid=vid, pid=pid, interface=interface)
 
 
-def query_mode() -> int:
-    return _query(C.OPCODE_QUERY_MODE)[0]
+def query_mode(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+               interface: int = C.APP_CONFIG_INTERFACE) -> int:
+    return _query(C.OPCODE_QUERY_MODE, vid=vid, pid=pid, interface=interface)[0]
 
 
-def query_build() -> bytes:
-    return _query(C.OPCODE_QUERY_BUILD)
+def query_build(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+                interface: int = C.APP_CONFIG_INTERFACE) -> bytes:
+    return _query(C.OPCODE_QUERY_BUILD, vid=vid, pid=pid, interface=interface)
 
 
-def query_profile_timer(profile: int = 0) -> int:
-    return _query(C.OPCODE_QUERY_PROFILE_TIMER, bytes([profile & 0xFF]))[1]
+def query_profile_timer(profile: int = 0, vid: int = C.RAZER_VID,
+                        pid: int = C.APP_PID,
+                        interface: int = C.APP_CONFIG_INTERFACE) -> int:
+    return _query(C.OPCODE_QUERY_PROFILE_TIMER, bytes([profile & 0xFF]),
+                  vid=vid, pid=pid, interface=interface)[1]
 
 
 @dataclass
@@ -92,13 +107,14 @@ class DeviceInfo:
     build: bytes = field(default_factory=bytes)
 
 
-def query_device_info() -> DeviceInfo:
+def query_device_info(vid: int = C.RAZER_VID, pid: int = C.APP_PID,
+                      interface: int = C.APP_CONFIG_INTERFACE) -> DeviceInfo:
     """Poll every available device-information field in one pass."""
     return DeviceInfo(
-        serial=query_serial(),
-        version=query_version(),
-        extended_version=query_extended_version(),
-        capability=query_capability(),
-        mode=query_mode(),
-        build=query_build(),
+        serial=query_serial(vid, pid, interface),
+        version=query_version(vid, pid, interface),
+        extended_version=query_extended_version(vid, pid, interface),
+        capability=query_capability(vid, pid, interface),
+        mode=query_mode(vid, pid, interface),
+        build=query_build(vid, pid, interface),
     )
